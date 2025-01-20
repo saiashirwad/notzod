@@ -11,7 +11,7 @@ class ValidationError extends Error {
 }
 
 abstract class BaseSchema<T, type extends string> {
-	_required: boolean = true
+	private _required: boolean = true
 	constructor(
 		public type: type,
 		public path?: string,
@@ -216,4 +216,16 @@ type Schema<T> =
 
 function number(path?: string) {
 	return new NumberSchema(path)
+}
+
+const schema = number().min(5).max(10)
+
+try {
+	const result = schema.parse(11)
+
+	console.log(result)
+} catch (e) {
+	if (e instanceof ValidationError) {
+		console.log(e.message)
+	}
 }
