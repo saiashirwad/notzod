@@ -1,3 +1,5 @@
+import type { Brand } from "./brand"
+
 class ValidationError extends Error {
 	constructor(
 		public options: {
@@ -10,7 +12,12 @@ class ValidationError extends Error {
 	}
 }
 
-abstract class BaseSchema<T, type extends string> {
+type SchemaFlags = {
+	optional?: boolean
+	nullable?: boolean
+}
+
+abstract class BaseSchema<out T, type extends string> {
 	private _required: boolean = true
 	private _nullable: boolean = true
 	constructor(
@@ -35,21 +42,21 @@ abstract class BaseSchema<T, type extends string> {
 
 	optional(): BaseSchema<T | undefined, type> {
 		this._required = false
-		return this
+		return this as any
 	}
 
 	nullable(): BaseSchema<T | null, type> {
 		this._nullable = true
-		return this
+		return this as any
 	}
 
 	runParser(value: unknown, run: (value: unknown) => T): T {
-		if (this._required === false) {
-			return run(value)
-		}
-		if (this._required && value === undefined) {
-			throw this.error("Value is required", value)
-		}
+		// if (this._required === false) {
+		// 	return run(value)
+		// }
+		// if (this._required && value === undefined) {
+		// 	throw this.error("Value is required", value)
+		// }
 		return run(value)
 	}
 }
@@ -80,8 +87,7 @@ class StringSchema extends BaseSchema<string, "string"> {
 
 	parse(value: unknown): string {
 		return this.runParser(value, (value) => {
-			if (typeof value !== "string")
-				throw this.error("Value is not a string", value)
+			if (typeof value !== "string") throw this.error("is not a string", value)
 
 			if (this._pattern && !this._pattern.test(value))
 				throw this.error("Value does not match pattern", value)
@@ -100,6 +106,8 @@ class StringSchema extends BaseSchema<string, "string"> {
 class NumberSchema extends BaseSchema<number, "number"> {
 	private _lt?: number
 	private _gt?: number
+	private _isPositive?: boolean
+	private _isNegative?: boolean
 
 	constructor(path?: string) {
 		super("number", path ?? "number")
@@ -115,10 +123,25 @@ class NumberSchema extends BaseSchema<number, "number"> {
 		return this
 	}
 
+	positive() {
+		this._isPositive = true
+		return this
+	}
+
+	negative() {
+		this._isNegative = true
+		return this
+	}
+
 	parse(value: unknown): number {
 		return this.runParser(value, (value) => {
-			if (typeof value !== "number")
-				throw this.error("Value is not a number", value)
+			if (typeof value !== "number") throw this.error("is not a number", value)
+
+			if (this._isPositive && value <= 0)
+				throw this.error("is not positive", value)
+
+			if (this._isNegative && value >= 0)
+				throw this.error("is not negative", value)
 
 			if (this._lt && value > this._lt)
 				throw this.error("Value is too small", value)
@@ -152,13 +175,12 @@ class BooleanSchema extends BaseSchema<boolean, "boolean"> {
 	parse(value: unknown): boolean {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "boolean")
-				throw this.error("Value is not a boolean", value)
+				throw this.error("is not a boolean", value)
 
-			if (this._true && value !== true)
-				throw this.error("Value is not true", value)
+			if (this._true && value !== true) throw this.error("is not true", value)
 
 			if (this._false && value !== false)
-				throw this.error("Value is not false", value)
+				throw this.error("is not false", value)
 
 			return value
 		})
@@ -230,7 +252,7 @@ class ObjectSchema<
 	} {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "object" || value === null) {
-				throw this.error("Value is not an object", value)
+				throw this.error("is not an object", value)
 			}
 
 			const result: any = {}
@@ -268,10 +290,13 @@ function object<T extends Record<string, BaseSchema<any, any>>>(
 }
 
 const schema = object({
-	hi: number().nullable(),
+	hi: number().negative().optional().nullable(),
 	name: string(),
 	tags: array(string()).min(1).max(3),
 })
+
+// const schema = number().optional()
+// const schema2 = schema.nullable()
 
 try {
 	const result = schema.parse({
