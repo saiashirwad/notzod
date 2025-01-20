@@ -50,7 +50,7 @@ class StringSchema extends BaseSchema<string, "string"> {
 	private _min?: number
 	private _max?: number
 
-	constructor(path: string) {
+	constructor(path?: string) {
 		super("string", path)
 	}
 
@@ -157,8 +157,11 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	private _min?: number
 	private _max?: number
 
-	constructor(public items: Schema<T>) {
-		super("array")
+	constructor(
+		public schema: Schema<T>,
+		path?: string,
+	) {
+		super("array", path)
 	}
 
 	min(value: number) {
@@ -171,7 +174,7 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 		return this
 	}
 
-	parse(value: unknown): T[] | undefined {
+	parse(value: unknown): T[] {
 		this._preValidate(value)
 		if (!(value instanceof Array)) {
 			throw this.error("Invalid array", value)
@@ -182,13 +185,20 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 		if (this._max && value.length > this._max) {
 			throw this.error(`Expected a maximum of ${this._max} items`, value)
 		}
-		return undefined
+		let result: T[] = []
+		for (const item of value) {
+			result.push(this.schema.parse(item) as any)
+		}
+		return result
 	}
 }
 
 class ObjectSchema<T> extends BaseSchema<{ [key: string]: T }, "object"> {
-	constructor(public properties: { [key: string]: Schema<T> }) {
-		super("object")
+	constructor(
+		public properties: { [key: string]: Schema<T> },
+		path?: string,
+	) {
+		super("object", path)
 	}
 
 	parse(value: unknown): { [key: string]: T } | undefined {
@@ -203,11 +213,27 @@ type Schema<T> =
 	| ArraySchema<T>
 	| ObjectSchema<T>
 
-function number(path?: string) {
+function number(path?: string): NumberSchema {
 	return new NumberSchema(path)
 }
 
-const schema = number().lt(10).gt(5)
+function string(path?: string): StringSchema {
+	return new StringSchema(path)
+}
+
+function boolean(path?: string): BooleanSchema {
+	return new BooleanSchema(path)
+}
+
+function array<T>(schema: Schema<T>, path?: string): ArraySchema<T> {
+	return new ArraySchema(schema, path)
+}
+
+function object<T>(properties: { [key: string]: Schema<T> }, path?: string) {
+	return new ObjectSchema(properties, path)
+}
+
+const schema = array(number().lt(10).gt(5))
 
 try {
 	const result = schema.parse(11)
