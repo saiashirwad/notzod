@@ -13,6 +13,8 @@ class ValidationError extends Error {
 abstract class BaseSchema<T, type extends string> {
 	private _required: boolean = true
 	private _nullable: boolean = true
+	private _refineFns: ((value: T) => boolean)[] = []
+
 	constructor(
 		public type: type,
 		public path?: string,
@@ -38,6 +40,11 @@ abstract class BaseSchema<T, type extends string> {
 		return this as any
 	}
 
+	refine(refineFn: (value: T) => boolean): BaseSchema<T, type> {
+		this._refineFns.push(refineFn)
+		return this
+	}
+
 	nullable(): BaseSchema<T | null, type> {
 		this._nullable = true
 		return this as any
@@ -57,7 +64,13 @@ abstract class BaseSchema<T, type extends string> {
 			throw this.error("value cannot be undefined", value)
 		}
 
-		return run(value)
+		const result = run(value)
+		for (const filterFn of this._refineFns) {
+			if (!filterFn(result)) {
+				throw this.error("value does not pass filter", result)
+			}
+		}
+		return result
 	}
 }
 
@@ -291,13 +304,10 @@ function object<T extends Record<string, BaseSchema<any, any>>>(
 
 const schema = object({
 	hi: number().negative().optional().nullable(),
-	name: string(),
+	name: string().refine((value) => value === "sai"),
 	tags: array(string()).min(1).max(3),
 	isActive: boolean().optional().nullable(),
 }).optional()
-
-// const schema = number().optional()
-// const schema2 = schema.nullable()
 
 try {
 	const result = schema.parse({
