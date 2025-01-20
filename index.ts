@@ -91,6 +91,23 @@ class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
 	}
 }
 
+class LiteralSchema<T extends string | number | boolean> extends Schema<T> {
+	constructor(
+		public value: T,
+		path?: string,
+	) {
+		super("literal", path)
+	}
+
+	parse(value: unknown): T {
+		return this.runParser(value, (value) => {
+			if (value !== this.value)
+				throw this.error("Value does not match literal", value)
+			return value as T
+		})
+	}
+}
+
 class StringSchema extends Schema<string> {
 	private _pattern?: RegExp
 	private _min?: number
@@ -316,34 +333,28 @@ function object<T extends Record<string, Schema<any>>>(
 	return new ObjectSchema<T>(properties, path)
 }
 
+function literal<T extends string | number | boolean>(value: T, path?: string) {
+	return new LiteralSchema<T>(value, path)
+}
+
 function union<T extends unknown[]>(
 	schemas: { [K in keyof T]: Schema<T[K]> },
 ): UnionSchema<T> {
 	return new UnionSchema(schemas)
 }
 
-const schema = object({
-	hi: number().negative().optional().nullable(),
-	name: string().refine((value) => value === "sai"),
-	tags: array(string()).min(1).max(3),
-	isActive: boolean().optional().nullable(),
-	thing: union([string(), number()]),
-	options: object({
-		id: string(),
-	}),
+const user = object({
+	name: string(),
+	age: number(),
+	type: union([literal("admin"), literal("user")]),
 }).optional()
 
 try {
-	const result = schema.parse({
-		hi: -11,
+	const result = user.parse({
 		name: "sai",
-		tags: ["hi", "hi", "hi asdf"],
-		thing: "i",
-		options: {
-			id: "hi",
-		},
+		age: 1,
+		type: "hi",
 	})
-
 	console.log(result)
 } catch (e) {
 	if (e instanceof ValidationError) {
