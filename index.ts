@@ -43,11 +43,6 @@ abstract class BaseSchema<T, type extends string> {
 		return this
 	}
 
-	// _preValidate(value: unknown) {
-	// 	if (this._required && value === undefined)
-	// 		throw this.error("Value is required", value)
-	// }
-
 	runParser(value: unknown, run: (value: unknown) => T): T {
 		if (this._required === false) {
 			return run(value)
@@ -86,7 +81,7 @@ class StringSchema extends BaseSchema<string, "string"> {
 	}
 
 	parse(value: unknown): string {
-		this.runParser(value, (value) => {
+		return this.runParser(value, (value) => {
 			if (typeof value !== "string")
 				throw this.error("Value is not a string", value)
 
@@ -156,7 +151,7 @@ class BooleanSchema extends BaseSchema<boolean, "boolean"> {
 	}
 
 	parse(value: unknown): boolean {
-		this._preValidate(value)
+		// this._preValidate(value)
 		if (typeof value !== "boolean")
 			throw this.error("Value is not a boolean", value)
 
@@ -192,7 +187,7 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	}
 
 	parse(value: unknown): T[] {
-		this._preValidate(value)
+		// this._preValidate(value)
 		if (!(value instanceof Array)) {
 			throw this.error("Invalid array", value)
 		}
@@ -232,7 +227,7 @@ class ObjectSchema<
 	parse(value: unknown): {
 		[K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never
 	} {
-		this._preValidate(value)
+		// this._preValidate(value)
 		if (typeof value !== "object" || value === null) {
 			throw this.error("Value is not an object", value)
 		}
