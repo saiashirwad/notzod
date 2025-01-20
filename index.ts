@@ -1,5 +1,3 @@
-import type { Brand } from "./brand"
-
 class ValidationError extends Error {
 	constructor(
 		public options: {
@@ -10,11 +8,6 @@ class ValidationError extends Error {
 	) {
 		super(options.message)
 	}
-}
-
-type SchemaFlags = {
-	optional?: boolean
-	nullable?: boolean
 }
 
 abstract class BaseSchema<T, type extends string> {
@@ -53,13 +46,13 @@ abstract class BaseSchema<T, type extends string> {
 	runParser(value: unknown, run: (value: unknown) => T): T {
 		if (value === null) {
 			if (this._nullable) {
-				return value as any
+				return null as any
 			}
 			throw this.error("value cannot be null", value)
 		}
 		if (value === undefined) {
 			if (!this._required) {
-				return value as any
+				return undefined as any
 			}
 			throw this.error("value cannot be undefined", value)
 		}
