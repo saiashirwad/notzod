@@ -37,10 +37,12 @@ abstract class BaseSchema<T, type extends string> {
 		return this
 	}
 
-	_parse(value: unknown) {
+	_preValidate(value: unknown) {
 		if (this._required && value === undefined)
 			throw this.error("Value is required", value)
 	}
+
+	_post(value: T) {}
 }
 
 class StringSchema extends BaseSchema<string, "string"> {
@@ -68,7 +70,7 @@ class StringSchema extends BaseSchema<string, "string"> {
 	}
 
 	parse(value: unknown): string {
-		this._parse(value)
+		this._preValidate(value)
 		if (typeof value !== "string")
 			throw this.error("Value is not a string", value)
 
@@ -104,13 +106,14 @@ class NumberSchema extends BaseSchema<number, "number"> {
 	}
 
 	parse(value: unknown): number {
+		this._preValidate(value)
 		if (typeof value !== "number")
 			throw this.error("Value is not a number", value)
 
-		if (this._lt && value < this._lt)
+		if (this._lt && value > this._lt)
 			throw this.error("Value is too small", value)
 
-		if (this._gt && value > this._gt)
+		if (this._gt && value < this._gt)
 			throw this.error("Value is too large", value)
 
 		return value
@@ -136,6 +139,7 @@ class BooleanSchema extends BaseSchema<boolean, "boolean"> {
 	}
 
 	parse(value: unknown): boolean {
+		this._preValidate(value)
 		if (typeof value !== "boolean")
 			throw this.error("Value is not a boolean", value)
 
@@ -168,6 +172,7 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	}
 
 	parse(value: unknown): T[] | undefined {
+		this._preValidate(value)
 		return undefined
 	}
 }
