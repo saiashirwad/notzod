@@ -272,13 +272,14 @@ function object<T extends Record<string, BaseSchema<any, any>>>(
 const schema = object({
 	hi: number().nullable(),
 	name: string(),
-	isTrue: boolean().optional().nullable(),
+	tags: array(string()).min(1).max(3),
 })
 
 try {
 	const result = schema.parse({
 		hi: 11,
 		name: "hi",
+		tags: ["hi", "hi", "hi asdf"],
 	})
 
 	console.log(result)
