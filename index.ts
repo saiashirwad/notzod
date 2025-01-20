@@ -52,8 +52,6 @@ abstract class BaseSchema<T, type extends string> {
 		}
 		return run(value)
 	}
-
-	_postValidate(value: T) {}
 }
 
 class StringSchema extends BaseSchema<string, "string"> {
