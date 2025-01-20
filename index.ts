@@ -17,7 +17,7 @@ type SchemaFlags = {
 	nullable?: boolean
 }
 
-abstract class BaseSchema<out T, type extends string> {
+abstract class BaseSchema<T, type extends string> {
 	private _required: boolean = true
 	private _nullable: boolean = true
 	constructor(
@@ -51,12 +51,19 @@ abstract class BaseSchema<out T, type extends string> {
 	}
 
 	runParser(value: unknown, run: (value: unknown) => T): T {
-		// if (this._required === false) {
-		// 	return run(value)
-		// }
-		// if (this._required && value === undefined) {
-		// 	throw this.error("Value is required", value)
-		// }
+		if (value === null) {
+			if (this._nullable) {
+				return value as any
+			}
+			throw this.error("value cannot be null", value)
+		}
+		if (value === undefined) {
+			if (!this._required) {
+				return value as any
+			}
+			throw this.error("value cannot be undefined", value)
+		}
+
 		return run(value)
 	}
 }
@@ -293,14 +300,15 @@ const schema = object({
 	hi: number().negative().optional().nullable(),
 	name: string(),
 	tags: array(string()).min(1).max(3),
-})
+	isActive: boolean().optional().nullable(),
+}).optional()
 
 // const schema = number().optional()
 // const schema2 = schema.nullable()
 
 try {
 	const result = schema.parse({
-		hi: 11,
+		hi: -11,
 		name: "hi",
 		tags: ["hi", "hi", "hi asdf"],
 	})
