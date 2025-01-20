@@ -312,7 +312,7 @@ const schema = object({
 try {
 	const result = schema.parse({
 		hi: -11,
-		name: "hi",
+		name: "sai",
 		tags: ["hi", "hi", "hi asdf"],
 	})
 
