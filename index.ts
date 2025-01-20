@@ -158,7 +158,7 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	private _max?: number
 
 	constructor(
-		public schema: Schema<T>,
+		public schema: BaseSchema<T, any>,
 		path?: string,
 	) {
 		super("array", path)
@@ -206,34 +206,39 @@ class ObjectSchema<T> extends BaseSchema<{ [key: string]: T }, "object"> {
 	}
 }
 
-type Schema<T> =
-	| StringSchema
-	| NumberSchema
-	| BooleanSchema
-	| ArraySchema<T>
-	| ObjectSchema<T>
+type Schema<T> = T extends string
+	? StringSchema
+	: T extends number
+		? NumberSchema
+		: T extends boolean
+			? BooleanSchema
+			: T extends Array<infer U>
+				? ArraySchema<U>
+				: T extends object
+					? ObjectSchema<T[keyof T]>
+					: never
 
-function number(path?: string): NumberSchema {
+function number(path?: string) {
 	return new NumberSchema(path)
 }
 
-function string(path?: string): StringSchema {
+function string(path?: string) {
 	return new StringSchema(path)
 }
 
-function boolean(path?: string): BooleanSchema {
+function boolean(path?: string) {
 	return new BooleanSchema(path)
 }
 
-function array<T>(schema: Schema<T>, path?: string): ArraySchema<T> {
-	return new ArraySchema(schema, path)
+function array<T>(schema: BaseSchema<T, any>, path?: string) {
+	return new ArraySchema<T>(schema, path)
 }
 
 function object<T>(properties: { [key: string]: Schema<T> }, path?: string) {
 	return new ObjectSchema(properties, path)
 }
 
-const schema = array(number().lt(10).gt(5))
+const schema = array(number())
 
 try {
 	const result = schema.parse(11)
