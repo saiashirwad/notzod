@@ -12,6 +12,7 @@ class ValidationError extends Error {
 
 abstract class BaseSchema<T, type extends string> {
 	private _required: boolean = true
+	private _nullable: boolean = true
 	constructor(
 		public type: type,
 		public path?: string,
@@ -32,14 +33,29 @@ abstract class BaseSchema<T, type extends string> {
 		return this
 	}
 
-	optional() {
+	optional(): BaseSchema<T | undefined, type> {
 		this._required = false
 		return this
 	}
 
-	_preValidate(value: unknown) {
-		if (this._required && value === undefined)
+	nullable(): BaseSchema<T | null, type> {
+		this._nullable = true
+		return this
+	}
+
+	// _preValidate(value: unknown) {
+	// 	if (this._required && value === undefined)
+	// 		throw this.error("Value is required", value)
+	// }
+
+	runParser(value: unknown, run: (value: unknown) => T): T {
+		if (this._required === false) {
+			return run(value)
+		}
+		if (this._required && value === undefined) {
 			throw this.error("Value is required", value)
+		}
+		return run(value)
 	}
 
 	_postValidate(value: T) {}
@@ -70,19 +86,21 @@ class StringSchema extends BaseSchema<string, "string"> {
 	}
 
 	parse(value: unknown): string {
-		if (typeof value !== "string")
-			throw this.error("Value is not a string", value)
+		this.runParser(value, (value) => {
+			if (typeof value !== "string")
+				throw this.error("Value is not a string", value)
 
-		if (this._pattern && !this._pattern.test(value))
-			throw this.error("Value does not match pattern", value)
+			if (this._pattern && !this._pattern.test(value))
+				throw this.error("Value does not match pattern", value)
 
-		if (this._min && value.length < this._min)
-			throw this.error("Value is too short", value)
+			if (this._min && value.length < this._min)
+				throw this.error("Value is too short", value)
 
-		if (this._max && value.length > this._max)
-			throw this.error("Value is too long", value)
+			if (this._max && value.length > this._max)
+				throw this.error("Value is too long", value)
 
-		return value
+			return value
+		})
 	}
 }
 
@@ -105,7 +123,7 @@ class NumberSchema extends BaseSchema<number, "number"> {
 	}
 
 	parse(value: unknown): number {
-		this._preValidate(value)
+		// this._preValidate(value)
 		if (typeof value !== "number")
 			throw this.error("Value is not a number", value)
 
