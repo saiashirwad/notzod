@@ -10,13 +10,13 @@ class ValidationError extends Error {
 	}
 }
 
-abstract class BaseSchema<T, type extends string> {
+abstract class Schema<T> {
 	private _required: boolean = true
 	private _nullable: boolean = true
 	private _refineFns: ((value: T) => boolean)[] = []
 
 	constructor(
-		public type: type,
+		public type: string,
 		public path?: string,
 	) {}
 
@@ -35,17 +35,17 @@ abstract class BaseSchema<T, type extends string> {
 		return this
 	}
 
-	optional(): BaseSchema<T | undefined, type> {
+	optional(): Schema<T | undefined> {
 		this._required = false
 		return this as any
 	}
 
-	refine(refineFn: (value: T) => boolean): BaseSchema<T, type> {
+	refine(refineFn: (value: T) => boolean): Schema<T> {
 		this._refineFns.push(refineFn)
 		return this
 	}
 
-	nullable(): BaseSchema<T | null, type> {
+	nullable(): Schema<T | null> {
 		this._nullable = true
 		return this as any
 	}
@@ -74,7 +74,7 @@ abstract class BaseSchema<T, type extends string> {
 	}
 }
 
-class StringSchema extends BaseSchema<string, "string"> {
+class StringSchema extends Schema<string> {
 	private _pattern?: RegExp
 	private _min?: number
 	private _max?: number
@@ -116,7 +116,7 @@ class StringSchema extends BaseSchema<string, "string"> {
 	}
 }
 
-class NumberSchema extends BaseSchema<number, "number"> {
+class NumberSchema extends Schema<number> {
 	private _lt?: number
 	private _gt?: number
 	private _isPositive?: boolean
@@ -167,7 +167,7 @@ class NumberSchema extends BaseSchema<number, "number"> {
 	}
 }
 
-class BooleanSchema extends BaseSchema<boolean, "boolean"> {
+class BooleanSchema extends Schema<boolean> {
 	private _true?: boolean
 	private _false?: boolean
 
@@ -200,12 +200,12 @@ class BooleanSchema extends BaseSchema<boolean, "boolean"> {
 	}
 }
 
-class ArraySchema<T> extends BaseSchema<T[], "array"> {
+class ArraySchema<T> extends Schema<T[]> {
 	private _min?: number
 	private _max?: number
 
 	constructor(
-		public schema: BaseSchema<T, any>,
+		public schema: Schema<T>,
 		path?: string,
 	) {
 		super("array", path)
@@ -241,12 +241,9 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	}
 }
 
-class ObjectSchema<
-	T extends Record<string, BaseSchema<any, any>>,
-> extends BaseSchema<
-	{ [K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never },
-	"object"
-> {
+class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
+	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
+}> {
 	constructor(
 		public properties: T,
 		path?: string,
@@ -254,14 +251,14 @@ class ObjectSchema<
 		super("object", path)
 		for (const key in properties) {
 			const schema = properties[key]
-			if (schema instanceof BaseSchema) {
+			if (schema instanceof Schema) {
 				schema.path = key
 			}
 		}
 	}
 
 	parse(value: unknown): {
-		[K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never
+		[K in keyof T]: T[K] extends Schema<infer U> ? U : never
 	} {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "object" || value === null) {
@@ -279,13 +276,6 @@ class ObjectSchema<
 	}
 }
 
-type Schema<T> =
-	| NumberSchema
-	| StringSchema
-	| BooleanSchema
-	| ArraySchema<T>
-	| ObjectSchema<any>
-
 function number(path?: string) {
 	return new NumberSchema(path)
 }
@@ -298,11 +288,11 @@ function boolean(path?: string) {
 	return new BooleanSchema(path)
 }
 
-function array<T>(schema: BaseSchema<T, any>, path?: string) {
+function array<T>(schema: Schema<T>, path?: string) {
 	return new ArraySchema<T>(schema, path)
 }
 
-function object<T extends Record<string, BaseSchema<any, any>>>(
+function object<T extends Record<string, Schema<any>>>(
 	properties: T,
 	path?: string,
 ) {
