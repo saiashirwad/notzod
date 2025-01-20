@@ -204,6 +204,12 @@ class ObjectSchema<
 		path?: string,
 	) {
 		super("object", path)
+		for (const key in properties) {
+			const schema = properties[key]
+			if (schema instanceof BaseSchema) {
+				schema.path = key
+			}
+		}
 	}
 
 	parse(value: unknown): {
@@ -276,11 +282,14 @@ const schema = object({
 })
 
 try {
-	const result = schema.parse(11)
+	const result = schema.parse({
+		hi: 11,
+		name: ["hi"],
+	})
 
 	console.log(result)
 } catch (e) {
 	if (e instanceof ValidationError) {
-		console.log(e.message)
+		console.log(e.options)
 	}
 }
