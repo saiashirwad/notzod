@@ -70,7 +70,6 @@ class StringSchema extends BaseSchema<string, "string"> {
 	}
 
 	parse(value: unknown): string {
-		this._preValidate(value)
 		if (typeof value !== "string")
 			throw this.error("Value is not a string", value)
 
@@ -230,29 +229,6 @@ class ObjectSchema<
 	}
 }
 
-type Schema<T> = T extends string
-	? StringSchema
-	: T extends number
-		? NumberSchema
-		: T extends boolean
-			? BooleanSchema
-			: T extends Array<infer U>
-				? ArraySchema<U>
-				: T extends object
-					? ObjectSchema<{ [K in keyof T]: Schema<T[K]> }>
-					: never
-type InferSchema<T> = T extends StringSchema
-	? string
-	: T extends NumberSchema
-		? number
-		: T extends BooleanSchema
-			? boolean
-			: T extends ArraySchema<infer U>
-				? InferSchema<U>[]
-				: T extends ObjectSchema<infer U>
-					? { [key: string]: InferSchema<U> }
-					: never
-
 function number(path?: string) {
 	return new NumberSchema(path)
 }
@@ -279,12 +255,13 @@ function object<T extends Record<string, BaseSchema<any, any>>>(
 const schema = object({
 	hi: number(),
 	name: string(),
+	isTrue: boolean().optional(),
 })
 
 try {
 	const result = schema.parse({
 		hi: 11,
-		name: ["hi"],
+		name: "hi",
 	})
 
 	console.log(result)
