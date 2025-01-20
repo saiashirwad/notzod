@@ -270,9 +270,9 @@ function object<T extends Record<string, BaseSchema<any, any>>>(
 }
 
 const schema = object({
-	hi: number(),
+	hi: number().nullable(),
 	name: string(),
-	isTrue: boolean().optional(),
+	isTrue: boolean().optional().nullable(),
 })
 
 try {
