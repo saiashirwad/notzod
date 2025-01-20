@@ -279,6 +279,13 @@ class ObjectSchema<
 	}
 }
 
+type Schema<T> =
+	| NumberSchema
+	| StringSchema
+	| BooleanSchema
+	| ArraySchema<T>
+	| ObjectSchema<any>
+
 function number(path?: string) {
 	return new NumberSchema(path)
 }
@@ -307,6 +314,9 @@ const schema = object({
 	name: string().refine((value) => value === "sai"),
 	tags: array(string()).min(1).max(3),
 	isActive: boolean().optional().nullable(),
+	options: object({
+		id: string(),
+	}),
 }).optional()
 
 try {
