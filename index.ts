@@ -193,16 +193,34 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	}
 }
 
-class ObjectSchema<T> extends BaseSchema<{ [key: string]: T }, "object"> {
+class ObjectSchema<
+	T extends Record<string, BaseSchema<any, any>>,
+> extends BaseSchema<
+	{ [K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never },
+	"object"
+> {
 	constructor(
-		public properties: { [key: string]: Schema<T> },
+		public properties: T,
 		path?: string,
 	) {
 		super("object", path)
 	}
 
-	parse(value: unknown): { [key: string]: T } | undefined {
-		return undefined
+	parse(value: unknown): {
+		[K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never
+	} {
+		this._preValidate(value)
+		if (typeof value !== "object" || value === null) {
+			throw this.error("Value is not an object", value)
+		}
+
+		const result: any = {}
+		for (const key in this.properties) {
+			const schema = this.properties[key]
+			const propertyValue = (value as any)[key]
+			result[key] = schema.parse(propertyValue)
+		}
+		return result
 	}
 }
 
@@ -215,7 +233,18 @@ type Schema<T> = T extends string
 			: T extends Array<infer U>
 				? ArraySchema<U>
 				: T extends object
-					? ObjectSchema<T[keyof T]>
+					? ObjectSchema<{ [K in keyof T]: Schema<T[K]> }>
+					: never
+type InferSchema<T> = T extends StringSchema
+	? string
+	: T extends NumberSchema
+		? number
+		: T extends BooleanSchema
+			? boolean
+			: T extends ArraySchema<infer U>
+				? InferSchema<U>[]
+				: T extends ObjectSchema<infer U>
+					? { [key: string]: InferSchema<U> }
 					: never
 
 function number(path?: string) {
@@ -234,11 +263,17 @@ function array<T>(schema: BaseSchema<T, any>, path?: string) {
 	return new ArraySchema<T>(schema, path)
 }
 
-function object<T>(properties: { [key: string]: Schema<T> }, path?: string) {
-	return new ObjectSchema(properties, path)
+function object<T extends Record<string, BaseSchema<any, any>>>(
+	properties: T,
+	path?: string,
+) {
+	return new ObjectSchema<T>(properties, path)
 }
 
-const schema = array(number())
+const schema = object({
+	hi: number(),
+	name: string(),
+})
 
 try {
 	const result = schema.parse(11)
