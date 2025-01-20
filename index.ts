@@ -118,17 +118,18 @@ class NumberSchema extends BaseSchema<number, "number"> {
 	}
 
 	parse(value: unknown): number {
-		// this._preValidate(value)
-		if (typeof value !== "number")
-			throw this.error("Value is not a number", value)
+		return this.runParser(value, (value) => {
+			if (typeof value !== "number")
+				throw this.error("Value is not a number", value)
 
-		if (this._lt && value > this._lt)
-			throw this.error("Value is too small", value)
+			if (this._lt && value > this._lt)
+				throw this.error("Value is too small", value)
 
-		if (this._gt && value < this._gt)
-			throw this.error("Value is too large", value)
+			if (this._gt && value < this._gt)
+				throw this.error("Value is too large", value)
 
-		return value
+			return value
+		})
 	}
 }
 
@@ -151,17 +152,18 @@ class BooleanSchema extends BaseSchema<boolean, "boolean"> {
 	}
 
 	parse(value: unknown): boolean {
-		// this._preValidate(value)
-		if (typeof value !== "boolean")
-			throw this.error("Value is not a boolean", value)
+		return this.runParser(value, (value) => {
+			if (typeof value !== "boolean")
+				throw this.error("Value is not a boolean", value)
 
-		if (this._true && value !== true)
-			throw this.error("Value is not true", value)
+			if (this._true && value !== true)
+				throw this.error("Value is not true", value)
 
-		if (this._false && value !== false)
-			throw this.error("Value is not false", value)
+			if (this._false && value !== false)
+				throw this.error("Value is not false", value)
 
-		return value
+			return value
+		})
 	}
 }
 
@@ -187,21 +189,22 @@ class ArraySchema<T> extends BaseSchema<T[], "array"> {
 	}
 
 	parse(value: unknown): T[] {
-		// this._preValidate(value)
-		if (!(value instanceof Array)) {
-			throw this.error("Invalid array", value)
-		}
-		if (this._min && value.length < this._min) {
-			throw this.error(`Expected a minimum of ${this._min} items`, value)
-		}
-		if (this._max && value.length > this._max) {
-			throw this.error(`Expected a maximum of ${this._max} items`, value)
-		}
-		let result: T[] = []
-		for (const item of value) {
-			result.push(this.schema.parse(item) as any)
-		}
-		return result
+		return this.runParser(value, (value) => {
+			if (!(value instanceof Array)) {
+				throw this.error("Invalid array", value)
+			}
+			if (this._min && value.length < this._min) {
+				throw this.error(`Expected a minimum of ${this._min} items`, value)
+			}
+			if (this._max && value.length > this._max) {
+				throw this.error(`Expected a maximum of ${this._max} items`, value)
+			}
+			let result: T[] = []
+			for (const item of value) {
+				result.push(this.schema.parse(item) as any)
+			}
+			return result
+		})
 	}
 }
 
@@ -227,18 +230,19 @@ class ObjectSchema<
 	parse(value: unknown): {
 		[K in keyof T]: T[K] extends BaseSchema<infer U, any> ? U : never
 	} {
-		// this._preValidate(value)
-		if (typeof value !== "object" || value === null) {
-			throw this.error("Value is not an object", value)
-		}
+		return this.runParser(value, (value) => {
+			if (typeof value !== "object" || value === null) {
+				throw this.error("Value is not an object", value)
+			}
 
-		const result: any = {}
-		for (const key in this.properties) {
-			const schema = this.properties[key]
-			const propertyValue = (value as any)[key]
-			result[key] = schema.parse(propertyValue)
-		}
-		return result
+			const result: any = {}
+			for (const key in this.properties) {
+				const schema = this.properties[key]
+				const propertyValue = (value as any)[key]
+				result[key] = schema.parse(propertyValue)
+			}
+			return result
+		})
 	}
 }
 
