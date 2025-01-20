@@ -329,7 +329,7 @@ function array<T>(schema: Schema<T>, path?: string) {
 function object<T extends Record<string, Schema<any>>>(
 	properties: T,
 	path?: string,
-) {
+): Schema<{ [K in keyof T]: T[K] extends Schema<infer U> ? U : never }> {
 	return new ObjectSchema<T>(properties, path)
 }
 
@@ -347,7 +347,7 @@ const user = object({
 	name: string(),
 	age: number(),
 	type: union([literal("admin"), literal("user")]),
-}).optional()
+})
 
 try {
 	const result = user.parse({
