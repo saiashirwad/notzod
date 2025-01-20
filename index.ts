@@ -74,6 +74,23 @@ abstract class Schema<T> {
 	}
 }
 
+class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
+	constructor(public schemas: { [K in keyof T]: Schema<T[K]> }) {
+		super("union", "union")
+	}
+
+	parse(value: unknown): T[number] {
+		return this.runParser(value, (value) => {
+			for (const schema of this.schemas) {
+				try {
+					return schema.parse(value) as T[number]
+				} catch (e) {}
+			}
+			throw this.error("No schema matched", value)
+		})
+	}
+}
+
 class StringSchema extends Schema<string> {
 	private _pattern?: RegExp
 	private _min?: number
@@ -299,11 +316,18 @@ function object<T extends Record<string, Schema<any>>>(
 	return new ObjectSchema<T>(properties, path)
 }
 
+function union<T extends unknown[]>(
+	schemas: { [K in keyof T]: Schema<T[K]> },
+): UnionSchema<T> {
+	return new UnionSchema(schemas)
+}
+
 const schema = object({
 	hi: number().negative().optional().nullable(),
 	name: string().refine((value) => value === "sai"),
 	tags: array(string()).min(1).max(3),
 	isActive: boolean().optional().nullable(),
+	thing: union([string(), number()]),
 	options: object({
 		id: string(),
 	}),
@@ -314,6 +338,10 @@ try {
 		hi: -11,
 		name: "sai",
 		tags: ["hi", "hi", "hi asdf"],
+		thing: "i",
+		options: {
+			id: "hi",
+		},
 	})
 
 	console.log(result)
