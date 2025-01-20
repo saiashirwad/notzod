@@ -1,16 +1,21 @@
 class ValidationError extends Error {
 	constructor(
-		public path: string,
-		public message: string,
-		public data?: unknown,
+		public options: {
+			path?: string
+			message: string
+			data?: unknown
+		},
 	) {
-		super(message)
+		super(options.message)
 	}
 }
 
 abstract class BaseSchema<T, type extends string> {
 	_required: boolean = true
-	constructor(public type: type) {}
+	constructor(
+		public type: type,
+		public path?: string,
+	) {}
 
 	abstract parse(value: unknown): T | undefined
 
@@ -26,9 +31,13 @@ abstract class BaseSchema<T, type extends string> {
 }
 
 class StringSchema extends BaseSchema<string, "string"> {
-	_pattern?: RegExp
-	_min?: number
-	_max?: number
+	private _pattern?: RegExp
+	private _min?: number
+	private _max?: number
+
+	constructor(path: string) {
+		super("string", path)
+	}
 
 	min(value: number) {
 		this._min = value
@@ -47,22 +56,42 @@ class StringSchema extends BaseSchema<string, "string"> {
 
 	parse(value: unknown): string {
 		if (typeof value !== "string")
-			throw new ValidationError("string", "Value is not a string", value)
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is not a string",
+				data: value,
+			})
 
 		if (this._pattern && !this._pattern.test(value))
-			throw new Error("Value does not match pattern")
+			throw new ValidationError({
+				path: this.path,
+				message: "Value does not match pattern",
+				data: value,
+			})
 		if (this._min && value.length < this._min)
-			throw new Error("Value is too short")
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is too short",
+				data: value,
+			})
 		if (this._max && value.length > this._max)
-			throw new Error("Value is too long")
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is too long",
+				data: value,
+			})
 
 		return value
 	}
 }
 
 class NumberSchema extends BaseSchema<number, "number"> {
-	_min?: number
-	_max?: number
+	private _min?: number
+	private _max?: number
+
+	constructor(path?: string) {
+		super("number", path ?? "number")
+	}
 
 	min(value: number) {
 		this._min = value
@@ -75,24 +104,92 @@ class NumberSchema extends BaseSchema<number, "number"> {
 	}
 
 	parse(value: unknown): number {
-		if (typeof value !== "number") throw new Error("Value is not a number")
+		if (typeof value !== "number")
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is not a number",
+				data: value,
+			})
 
-		if (this._min && value < this._min) throw new Error("Value is too small")
-		if (this._max && value > this._max) throw new Error("Value is too large")
+		if (this._min && value < this._min)
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is too small",
+				data: value,
+			})
+		if (this._max && value > this._max)
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is too large",
+				data: value,
+			})
 
 		return value
 	}
 }
 
 class BooleanSchema extends BaseSchema<boolean, "boolean"> {
-	parse(value: unknown): boolean | undefined {
-		return undefined
+	private _true?: boolean
+	private _false?: boolean
+
+	constructor(path?: string) {
+		super("boolean", path ?? "boolean")
+	}
+
+	true() {
+		this._true = true
+		return this
+	}
+
+	false() {
+		this._false = true
+		return this
+	}
+
+	parse(value: unknown): boolean {
+		if (typeof value !== "boolean")
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is not a boolean",
+				data: value,
+			})
+
+		if (this._true && value !== true) {
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is not true",
+				data: value,
+			})
+		}
+
+		if (this._false && value !== false) {
+			throw new ValidationError({
+				path: this.path,
+				message: "Value is not false",
+				data: value,
+			})
+		}
+
+		return value
 	}
 }
 
 class ArraySchema<T> extends BaseSchema<T[], "array"> {
+	private _min?: number
+	private _max?: number
+
 	constructor(public items: Schema<T>) {
 		super("array")
+	}
+
+	min(value: number) {
+		this._min = value
+		return this
+	}
+
+	max(value: number) {
+		this._max = value
+		return this
 	}
 
 	parse(value: unknown): T[] | undefined {
@@ -116,3 +213,7 @@ type Schema<T> =
 	| BooleanSchema
 	| ArraySchema<T>
 	| ObjectSchema<T>
+
+function number(path?: string) {
+	return new NumberSchema(path)
+}
