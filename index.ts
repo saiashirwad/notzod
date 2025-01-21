@@ -1,9 +1,11 @@
+type ValidationErrorData = unknown
+
 class ValidationError extends Error {
 	constructor(
 		public options: {
 			path?: string
 			message: string
-			data?: unknown
+			data?: ValidationErrorData
 		},
 	) {
 		super(options.message)
@@ -74,8 +76,10 @@ abstract class Schema<T> {
 	}
 }
 
+type UnionSchemaParams<T extends unknown[]> = { [K in keyof T]: Schema<T[K]> }
+
 class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
-	constructor(public schemas: { [K in keyof T]: Schema<T[K]> }) {
+	constructor(public schemas: UnionSchemaParams<T>) {
 		super("union", "union")
 	}
 
@@ -91,58 +95,63 @@ class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
 	}
 }
 
-class LiteralSchema<T extends string | number | boolean> extends Schema<T> {
+type LiteralSchemaTypes = string | number | boolean
+type LiteralSchemaParams = {
+	path?: string
+}
+
+class LiteralSchema<T extends LiteralSchemaTypes> extends Schema<T> {
 	constructor(
-		public value: T,
-		path?: string,
+		public literalValue: T,
+		public options: LiteralSchemaParams,
 	) {
-		super("literal", path)
+		super("literal", options.path)
 	}
 
 	parse(value: unknown): T {
 		return this.runParser(value, (value) => {
-			if (value !== this.value)
+			if (value !== this.literalValue)
 				throw this.error("Value does not match literal", value)
 			return value as T
 		})
 	}
 }
 
-class StringSchema extends Schema<string> {
-	private _pattern?: RegExp
-	private _min?: number
-	private _max?: number
+type StringSchemaParams = {
+	pattern?: RegExp
+	min?: number
+	max?: number
+	path?: string
+}
 
-	constructor(path?: string) {
-		super("string", path)
+class StringSchema extends Schema<string> {
+	constructor(public params: StringSchemaParams) {
+		super("string", params.path)
 	}
 
 	min(value: number) {
-		this._min = value
-		return this
+		return new StringSchema({ ...this.params, min: value })
 	}
 
 	max(value: number) {
-		this._max = value
-		return this
+		return new StringSchema({ ...this.params, max: value })
 	}
 
 	pattern(value: RegExp) {
-		this._pattern = value
-		return this
+		return new StringSchema({ ...this.params, pattern: value })
 	}
 
 	parse(value: unknown): string {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "string") throw this.error("is not a string", value)
 
-			if (this._pattern && !this._pattern.test(value))
+			if (this.params.pattern && !this.params.pattern.test(value))
 				throw this.error("Value does not match pattern", value)
 
-			if (this._min && value.length < this._min)
+			if (this.params.min && value.length < this.params.min)
 				throw this.error("Value is too short", value)
 
-			if (this._max && value.length > this._max)
+			if (this.params.max && value.length > this.params.max)
 				throw this.error("Value is too long", value)
 
 			return value
@@ -150,50 +159,57 @@ class StringSchema extends Schema<string> {
 	}
 }
 
-class NumberSchema extends Schema<number> {
-	private _lt?: number
-	private _gt?: number
-	private _isPositive?: boolean
-	private _isNegative?: boolean
+type NumberSchemaParams = {
+	path?: string
+	lt?: number
+	gt?: number
+	isPositive?: boolean
+	isNegative?: boolean
+}
 
-	constructor(path?: string) {
-		super("number", path ?? "number")
+class NumberSchema extends Schema<number> {
+	constructor(public params: NumberSchemaParams) {
+		super("number", params.path)
 	}
 
 	lt(value: number) {
-		this._lt = value
-		return this
+		return new NumberSchema({ ...this.params, lt: value })
 	}
 
 	gt(value: number) {
-		this._gt = value
-		return this
+		return new NumberSchema({ ...this.params, gt: value })
 	}
 
 	positive() {
-		this._isPositive = true
-		return this
+		return new NumberSchema({
+			...this.params,
+			isPositive: true,
+			isNegative: false,
+		})
 	}
 
 	negative() {
-		this._isNegative = true
-		return this
+		return new NumberSchema({
+			...this.params,
+			isPositive: false,
+			isNegative: true,
+		})
 	}
 
 	parse(value: unknown): number {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "number") throw this.error("is not a number", value)
 
-			if (this._isPositive && value <= 0)
+			if (this.params.isPositive && value <= 0)
 				throw this.error("is not positive", value)
 
-			if (this._isNegative && value >= 0)
+			if (this.params.isNegative && value >= 0)
 				throw this.error("is not negative", value)
 
-			if (this._lt && value > this._lt)
+			if (this.params.lt && value > this.params.lt)
 				throw this.error("Value is too small", value)
 
-			if (this._gt && value < this._gt)
+			if (this.params.gt && value < this.params.gt)
 				throw this.error("Value is too large", value)
 
 			return value
@@ -201,22 +217,31 @@ class NumberSchema extends Schema<number> {
 	}
 }
 
-class BooleanSchema extends Schema<boolean> {
-	private _true?: boolean
-	private _false?: boolean
+type BooleanSchemaParams = {
+	path?: string
+	true?: boolean
+	false?: boolean
+}
 
-	constructor(path?: string) {
-		super("boolean", path ?? "boolean")
+class BooleanSchema extends Schema<boolean> {
+	constructor(public params: BooleanSchemaParams) {
+		super("boolean", params.path)
 	}
 
 	true() {
-		this._true = true
-		return this
+		return new BooleanSchema({
+			...this.params,
+			true: true,
+			false: undefined,
+		})
 	}
 
 	false() {
-		this._false = true
-		return this
+		return new BooleanSchema({
+			...this.params,
+			true: undefined,
+			false: true,
+		})
 	}
 
 	parse(value: unknown): boolean {
@@ -224,9 +249,10 @@ class BooleanSchema extends Schema<boolean> {
 			if (typeof value !== "boolean")
 				throw this.error("is not a boolean", value)
 
-			if (this._true && value !== true) throw this.error("is not true", value)
+			if (this.params.true && value !== true)
+				throw this.error("is not true", value)
 
-			if (this._false && value !== false)
+			if (this.params.false && value !== false)
 				throw this.error("is not false", value)
 
 			return value
@@ -234,25 +260,26 @@ class BooleanSchema extends Schema<boolean> {
 	}
 }
 
-class ArraySchema<T> extends Schema<T[]> {
-	private _min?: number
-	private _max?: number
+type ArraySchemaParams = {
+	path?: string
+	min?: number
+	max?: number
+}
 
+class ArraySchema<T> extends Schema<T[]> {
 	constructor(
 		public schema: Schema<T>,
-		path?: string,
+		public params: ArraySchemaParams,
 	) {
-		super("array", path)
+		super("array", params.path)
 	}
 
 	min(value: number) {
-		this._min = value
-		return this
+		return new ArraySchema(this.schema, { ...this.params, min: value })
 	}
 
 	max(value: number) {
-		this._max = value
-		return this
+		return new ArraySchema(this.schema, { ...this.params, max: value })
 	}
 
 	parse(value: unknown): T[] {
@@ -260,11 +287,17 @@ class ArraySchema<T> extends Schema<T[]> {
 			if (!(value instanceof Array)) {
 				throw this.error("Invalid array", value)
 			}
-			if (this._min && value.length < this._min) {
-				throw this.error(`Expected a minimum of ${this._min} items`, value)
+			if (this.params.min && value.length < this.params.min) {
+				throw this.error(
+					`Expected a minimum of ${this.params.min} items`,
+					value,
+				)
 			}
-			if (this._max && value.length > this._max) {
-				throw this.error(`Expected a maximum of ${this._max} items`, value)
+			if (this.params.max && value.length > this.params.max) {
+				throw this.error(
+					`Expected a maximum of ${this.params.max} items`,
+					value,
+				)
 			}
 			let result: T[] = []
 			for (const item of value) {
@@ -275,14 +308,22 @@ class ArraySchema<T> extends Schema<T[]> {
 	}
 }
 
-class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
+type ObjectSchemaResult<T extends Record<string, Schema<any>>> = {
 	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
-}> {
+}
+
+type ObjectSchemaParams = {
+  path?: string
+}
+
+class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<
+	ObjectSchemaResult<T>
+> {
 	constructor(
 		public properties: T,
-		path?: string,
+    public params?: ObjectSchemaParams
 	) {
-		super("object", path)
+		super("object", params?.path)
 		for (const key in properties) {
 			const schema = properties[key]
 			if (schema instanceof Schema) {
@@ -291,9 +332,7 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 		}
 	}
 
-	parse(value: unknown): {
-		[K in keyof T]: T[K] extends Schema<infer U> ? U : never
-	} {
+	parse(value: unknown): ObjectSchemaResult<T> {
 		return this.runParser(value, (value) => {
 			if (typeof value !== "object" || value === null) {
 				throw this.error("is not an object", value)
@@ -310,31 +349,31 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	}
 }
 
-function number(path?: string) {
-	return new NumberSchema(path)
+function number(params?: NumberSchemaParams) {
+	return new NumberSchema(params ?? {})
 }
 
-function string(path?: string) {
-	return new StringSchema(path)
+function string(params?: StringSchemaParams) {
+	return new StringSchema(params ?? {})
 }
 
-function boolean(path?: string) {
-	return new BooleanSchema(path)
+function boolean(params?: BooleanSchemaParams) {
+	return new BooleanSchema(params ?? {})
 }
 
-function array<T>(schema: Schema<T>, path?: string) {
-	return new ArraySchema<T>(schema, path)
+function array<T>(schema: Schema<T>, params?: ArraySchemaParams) {
+	return new ArraySchema<T>(schema, params ?? {})
 }
 
 function object<T extends Record<string, Schema<any>>>(
 	properties: T,
-	path?: string,
+  params?: ObjectSchemaParams
 ): Schema<{ [K in keyof T]: T[K] extends Schema<infer U> ? U : never }> {
-	return new ObjectSchema<T>(properties, path)
+	return new ObjectSchema<T>(properties, params)
 }
 
-function literal<T extends string | number | boolean>(value: T, path?: string) {
-	return new LiteralSchema<T>(value, path)
+function literal<T extends LiteralSchemaTypes>(literalValue: T, path?: string) {
+	return new LiteralSchema(literalValue, { path })
 }
 
 function union<T extends unknown[]>(
@@ -343,17 +382,30 @@ function union<T extends unknown[]>(
 	return new UnionSchema(schemas)
 }
 
+type user = {
+	name: string
+	age: number
+	type: "admin" | "user"
+	tags: string[]
+}
+
+type Infer<S> = S extends Schema<infer T> ? T : never
+
 const user = object({
 	name: string(),
-	age: number(),
+	age: number().refine((age) => age === 10),
 	type: union([literal("admin"), literal("user")]),
+	tags: array(string()).min(2),
 })
+
+type User = Infer<typeof user>
 
 try {
 	const result = user.parse({
 		name: "sai",
 		age: 1,
 		type: "admin",
+		tags: ["hi"],
 	})
 	console.log(result)
 } catch (e) {
