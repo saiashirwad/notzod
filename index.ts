@@ -386,64 +386,6 @@ const user = object({
 	tags: array(string()).min(1).max(3),
 })
 
-// function schemaToIR(schema: Schema<any>): any {
-// 	const baseIR = {
-// 		type: schema.type,
-// 		required: schema._required,
-// 		nullable: schema._nullable,
-// 		path: schema.path,
-// 	}
-
-// 	if (schema instanceof StringSchema) {
-// 		return {
-// 			...baseIR,
-// 			min: schema.min,
-// 			max: schema.max,
-// 			pattern: schema.pattern
-// 				? {
-// 						source: schema.pattern.source,
-// 						flags: schema.pattern.flags,
-// 					}
-// 				: undefined,
-// 		}
-// 	} else if (schema instanceof NumberSchema) {
-// 		return {
-// 			...baseIR,
-// 			lt: schema.lt,
-// 			gt: schema.gt,
-// 			isPositive: schema.isPositive,
-// 			isNegative: schema.isNegative,
-// 		}
-// 	} else if (schema instanceof BooleanSchema) {
-// 		return {
-// 			...baseIR,
-// 			mustBeTrue: schema.mustBeTrue,
-// 			mustBeFalse: schema.mustBeFalse,
-// 		}
-// 	} else if (schema instanceof ArraySchema) {
-// 		return {
-// 			...baseIR,
-// 			elementSchema: schemaToIR(schema.schema),
-// 			min: schema.min,
-// 			max: schema.max,
-// 		}
-// 	} else if (schema instanceof ObjectSchema) {
-// 		const properties: Record<string, any> = {}
-// 		for (const key of schema.propertyKeys) {
-// 			properties[key] = schemaToIR(schema.properties[key])
-// 		}
-// 		return { ...baseIR, properties }
-// 	} else if (schema instanceof UnionSchema) {
-// 		return {
-// 			...baseIR,
-// 			options: schema.schemas.map((s) => schemaToIR(s)),
-// 		}
-// 	} else if (schema instanceof LiteralSchema) {
-// 		return { ...baseIR, value: schema.value }
-// 	}
-// 	throw new Error(`Unsupported schema type: ${schema.type}`)
-// }
-
 // const result = schemaToIR(user)
 // console.log(result)
 
