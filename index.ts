@@ -276,25 +276,31 @@ class BooleanSchema extends Schema<boolean> {
 	}
 }
 
-class ArraySchema<T> extends Schema<T[]> {
-	private _min?: number
-	private _max?: number
+type ArraySchemaOptions<T> = {
+	path?: string
+	min?: number
+	max?: number
+}
 
+class ArraySchema<T> extends Schema<T[]> {
 	constructor(
 		public schema: Schema<T>,
-		path?: string,
+		public options: ArraySchemaOptions<T>,
 	) {
-		super("array", path)
+		super("array", options.path)
+		this.compile()
+	}
+
+	compile(): void {
+		// TODO: implement
 	}
 
 	min(value: number) {
-		this._min = value
-		return this
+		return new ArraySchema(this.schema, { ...this.options, min: value })
 	}
 
 	max(value: number) {
-		this._max = value
-		return this
+		return new ArraySchema(this.schema, { ...this.options, max: value })
 	}
 
 	parse(value: unknown): T[] {
@@ -304,11 +310,17 @@ class ArraySchema<T> extends Schema<T[]> {
 			}
 
 			const len = value.length
-			if (this._min && len < this._min) {
-				throw this.error(`expected a minimum of ${this._min} items`, value)
+			if (this.options.min && len < this.options.min) {
+				throw this.error(
+					`expected a minimum of ${this.options.min} items`,
+					value,
+				)
 			}
-			if (this._max && len > this._max) {
-				throw this.error(`expected a maximum of ${this._max} items`, value)
+			if (this.options.max && len > this.options.max) {
+				throw this.error(
+					`expected a maximum of ${this.options.max} items`,
+					value,
+				)
 			}
 
 			const result = new Array(len)
@@ -339,7 +351,7 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 		this.compile()
 	}
 
-	private compile() {
+	compile() {
 		const validators = Object.entries(this.properties).map(
 			([key, schema]) => `result.${key} = ${schema.compile()}(value.${key});`,
 		)
@@ -379,12 +391,15 @@ export function string(options: StringSchemaOptions = {}) {
 	return new StringSchema(options)
 }
 
-export function boolean(path?: string) {
-	return new BooleanSchema(path)
+export function boolean(options: BooleanSchemaOptions = {}) {
+	return new BooleanSchema(options)
 }
 
-export function array<T>(schema: Schema<T>, path?: string) {
-	return new ArraySchema<T>(schema, path)
+export function array<T>(
+	schema: Schema<T>,
+	options: ArraySchemaOptions<T> = {},
+) {
+	return new ArraySchema<T>(schema, options)
 }
 
 export function object<T extends Record<string, Schema<any>>>(
