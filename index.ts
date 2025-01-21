@@ -110,29 +110,30 @@ class LiteralSchema<
 	}
 }
 
+type StringSchemaOptions = {
+	path?: string
+	min?: number
+	max?: number
+	pattern?: RegExp
+}
+
 class StringSchema extends Schema<string> {
 	private compiledParse?: (value: unknown) => string
-	private _pattern?: RegExp
-	private _min?: number
-	private _max?: number
 
-	constructor(path?: string) {
-		super("string", path)
+	constructor(public options: StringSchemaOptions) {
+		super("string", options.path)
 	}
 
 	min(value: number) {
-		this._min = value
-		return this
+		return new StringSchema({ ...this.options, min: value })
 	}
 
 	max(value: number) {
-		this._max = value
-		return this
+		return new StringSchema({ ...this.options, max: value })
 	}
 
 	pattern(value: RegExp) {
-		this._pattern = value
-		return this
+		return new StringSchema({ ...this.options, pattern: value })
 	}
 
 	compile() {
@@ -140,17 +141,17 @@ class StringSchema extends Schema<string> {
 		checks.push(
 			'if (typeof value !== "string") throw this.error("not a string");',
 		)
-		if (this._min)
+		if (this.options.min)
 			checks.push(
-				`if (value.length < ${this._min}) throw this.error("too short");`,
+				`if (value.length < ${this.options.min}) throw this.error("too short");`,
 			)
-		if (this._max)
+		if (this.options.max)
 			checks.push(
-				`if (value.length > ${this._max}) throw this.error("too long");`,
+				`if (value.length > ${this.options.max}) throw this.error("too long");`,
 			)
-		if (this._pattern)
+		if (this.options.pattern)
 			checks.push(
-				`if (!${this._pattern}.test(value)) throw error("pattern mismatch");`,
+				`if (!${this.options.pattern}.test(value)) throw error("pattern mismatch");`,
 			)
 
 		this.compiledParse = new Function(
@@ -349,8 +350,8 @@ export function number(path?: string) {
 	return new NumberSchema(path)
 }
 
-export function string(path?: string) {
-	return new StringSchema(path)
+export function string(options: StringSchemaOptions = {}) {
+	return new StringSchema(options)
 }
 
 export function boolean(path?: string) {
@@ -382,7 +383,7 @@ export function union<T extends unknown[]>(
 }
 
 const user = object({
-	name: string(),
+	name: string().max(3),
 	age: number(),
 	type: union([literal("admin"), literal("user")]),
 	tags: array(string()).min(1).max(3),
