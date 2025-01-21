@@ -118,10 +118,11 @@ type StringSchemaOptions = {
 }
 
 class StringSchema extends Schema<string> {
-	private compiledParse?: (value: unknown) => string
+	private _compiledParse?: (value: unknown) => string
 
 	constructor(public options: StringSchemaOptions) {
 		super("string", options.path)
+		this.compile()
 	}
 
 	min(value: number) {
@@ -154,7 +155,7 @@ class StringSchema extends Schema<string> {
 				`if (!${this.options.pattern}.test(value)) throw error("pattern mismatch");`,
 			)
 
-		this.compiledParse = new Function(
+		this._compiledParse = new Function(
 			"value",
 			`${checks.join("\n")}
         return value;
@@ -163,40 +164,40 @@ class StringSchema extends Schema<string> {
 	}
 
 	parse(value: unknown): string {
-		if (!this.compiledParse) this.compile()
-		return this.compiledParse!(value)
+		return this._compiledParse!(value)
 	}
 }
 
+type NumberSchemaOptions = {
+	path?: string
+	lt?: number
+	gt?: number
+	positive?: boolean
+	negative?: boolean
+}
+
 class NumberSchema extends Schema<number> {
-	private _lt?: number
-	private _gt?: number
-	private _isPositive?: boolean
-	private _isNegative?: boolean
 	private _compiledParse?: (value: unknown) => number
 
-	constructor(path?: string) {
-		super("number", path ?? "number")
+	constructor(public options: NumberSchemaOptions) {
+		super("number", options.path)
+		this.compile()
 	}
 
 	lt(value: number) {
-		this._lt = value
-		return this
+		return new NumberSchema({ ...this.options, lt: value })
 	}
 
 	gt(value: number) {
-		this._gt = value
-		return this
+		return new NumberSchema({ ...this.options, gt: value })
 	}
 
 	positive() {
-		this._isPositive = true
-		return this
+		return new NumberSchema({ ...this.options, positive: true })
 	}
 
 	negative() {
-		this._isNegative = true
-		return this
+		return new NumberSchema({ ...this.options, negative: true })
 	}
 
 	compile() {
@@ -204,17 +205,17 @@ class NumberSchema extends Schema<number> {
 		checks.push(
 			'if (typeof value !== "number") throw this.error("is not a number", value);',
 		)
-		if (this._isPositive)
+		if (this.options.positive)
 			checks.push(`if (value <= 0) throw this.error("is not positive", value);`)
-		if (this._isNegative)
+		if (this.options.negative)
 			checks.push(`if (value >= 0) throw this.error("is not negative", value);`)
-		if (this._lt)
+		if (this.options.lt)
 			checks.push(
-				`if (value > ${this._lt}) throw this.error("Value is too small", value);`,
+				`if (value > ${this.options.lt}) throw this.error("Value is too small", value);`,
 			)
-		if (this._gt)
+		if (this.options.gt)
 			checks.push(
-				`if (value < ${this._gt}) throw this.error("Value is too large", value);`,
+				`if (value < ${this.options.gt}) throw this.error("Value is too large", value);`,
 			)
 
 		this._compiledParse = new Function(
@@ -225,7 +226,6 @@ class NumberSchema extends Schema<number> {
 	}
 
 	parse(value: unknown): number {
-		if (!this._compiledParse) this.compile()
 		return this._compiledParse!(value)
 	}
 }
@@ -346,8 +346,8 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	}
 }
 
-export function number(path?: string) {
-	return new NumberSchema(path)
+export function number(options: NumberSchemaOptions = {}) {
+	return new NumberSchema(options)
 }
 
 export function string(options: StringSchemaOptions = {}) {
