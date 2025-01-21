@@ -352,13 +352,16 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	}
 
 	compile() {
-		const validators = Object.entries(this.properties).map(
-			([key, schema]) => `result.${key} = ${schema.compile()}(value.${key});`,
-		)
+		const validators = Object.entries(this.properties).map(([key, schema]) => {
+			schema.compile()
+			return `result.${key} = ${schema.compile()}(value.${key});`
+		})
 		this._compiledParse = new Function(
 			"value",
 			`{ ${validators.join("")} }`,
 		) as any
+
+		console.log(this._compiledParse?.toString())
 	}
 
 	parse(value: unknown): {
@@ -438,6 +441,7 @@ try {
 	})
 	console.log(result)
 } catch (e) {
+	console.log(e)
 	if (e instanceof ValidationError) {
 		console.log(e.options)
 	}
@@ -452,7 +456,3 @@ try {
 // 		console.log(e.options)
 // 	}
 // }
-
-const lol = literal(null)
-const result = lol.parse(null)
-console.log(result)
