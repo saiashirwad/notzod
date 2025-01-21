@@ -91,7 +91,9 @@ class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
 	}
 }
 
-class LiteralSchema<T extends string | number | boolean> extends Schema<T> {
+class LiteralSchema<
+	T extends string | number | boolean | null,
+> extends Schema<T> {
 	constructor(
 		public value: T,
 		path?: string,
@@ -366,7 +368,7 @@ export function object<T extends Record<string, Schema<any>>>(
 	return new ObjectSchema<T>(properties, path)
 }
 
-export function literal<T extends string | number | boolean>(
+export function literal<T extends string | number | boolean | null>(
 	value: T,
 	path?: string,
 ) {
@@ -386,13 +388,23 @@ const user = object({
 	tags: array(string()).min(1).max(3),
 })
 
+try {
+	const result = user.parse({
+		name: "sai",
+		age: 1,
+		type: "admin",
+		tags: ["hi", "hi", "hi"],
+	})
+	console.log(result)
+} catch (e) {
+	if (e instanceof ValidationError) {
+		console.log(e.options)
+	}
+}
+
+// const rip = number().gt(1).lt(3)
 // try {
-// 	const result = user.parse({
-// 		name: "sai",
-// 		age: 1,
-// 		type: "admin",
-// 		tags: ["hi", "hi", "hi"],
-// 	})
+// 	const result = rip.parse(2)
 // 	console.log(result)
 // } catch (e) {
 // 	if (e instanceof ValidationError) {
@@ -400,12 +412,6 @@ const user = object({
 // 	}
 // }
 
-const rip = number().gt(1).lt(3)
-try {
-	const result = rip.parse(2)
-	console.log(result)
-} catch (e) {
-	if (e instanceof ValidationError) {
-		console.log(e.options)
-	}
-}
+const lol = literal(null)
+const result = lol.parse(null)
+console.log(result)
