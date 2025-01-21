@@ -257,18 +257,21 @@ class ArraySchema<T> extends Schema<T[]> {
 
 	parse(value: unknown): T[] {
 		return this.runParser(value, (value) => {
-			if (!(value instanceof Array)) {
-				throw this.error("Invalid array", value)
+			if (!Array.isArray(value)) {
+				throw this.error("is not an array", value)
 			}
-			if (this._min && value.length < this._min) {
-				throw this.error(`Expected a minimum of ${this._min} items`, value)
+
+			const len = value.length
+			if (this._min && len < this._min) {
+				throw this.error(`expected a minimum of ${this._min} items`, value)
 			}
-			if (this._max && value.length > this._max) {
-				throw this.error(`Expected a maximum of ${this._max} items`, value)
+			if (this._max && len > this._max) {
+				throw this.error(`expected a maximum of ${this._max} items`, value)
 			}
-			let result: T[] = []
-			for (const item of value) {
-				result.push(this.schema.parse(item) as any)
+
+			const result = new Array(len)
+			for (let i = 0; i < len; i++) {
+				result[i] = this.schema.parse(value[i])
 			}
 			return result
 		})
@@ -278,6 +281,7 @@ class ArraySchema<T> extends Schema<T[]> {
 class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
 }> {
+	private propertyKeys: string[]
 	constructor(
 		public properties: T,
 		path?: string,
@@ -289,6 +293,7 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 				schema.path = key
 			}
 		}
+		this.propertyKeys = Object.keys(properties)
 	}
 
 	parse(value: unknown): {
@@ -299,8 +304,10 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 				throw this.error("is not an object", value)
 			}
 
-			const result: any = {}
-			for (const key in this.properties) {
+			const result = Object.create(null)
+			const len = this.propertyKeys.length
+			for (let i = 0; i < len; i++) {
+				const key = this.propertyKeys[i]
 				const schema = this.properties[key]
 				const propertyValue = (value as any)[key]
 				result[key] = schema.parse(propertyValue)
@@ -353,7 +360,7 @@ try {
 	const result = user.parse({
 		name: "sai",
 		age: 1,
-		type: "hi",
+		type: "admin",
 	})
 	console.log(result)
 } catch (e) {
