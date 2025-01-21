@@ -386,9 +386,6 @@ const user = object({
 	tags: array(string()).min(1).max(3),
 })
 
-// const result = schemaToIR(user)
-// console.log(result)
-
 // try {
 // 	const result = user.parse({
 // 		name: "sai",
