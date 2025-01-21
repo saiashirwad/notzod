@@ -1,4 +1,4 @@
-class ValidationError extends Error {
+export class ValidationError extends Error {
 	constructor(
 		public options: {
 			path?: string
@@ -75,7 +75,7 @@ abstract class Schema<T> {
 }
 
 class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
-	constructor(public schemas: { [K in keyof T]: Schema<T[K]> }) {
+	constructor(public schemas: [...Schema<T[number]>[]]) {
 		super("union", "union")
 	}
 
@@ -317,36 +317,39 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	}
 }
 
-function number(path?: string) {
+export function number(path?: string) {
 	return new NumberSchema(path)
 }
 
-function string(path?: string) {
+export function string(path?: string) {
 	return new StringSchema(path)
 }
 
-function boolean(path?: string) {
+export function boolean(path?: string) {
 	return new BooleanSchema(path)
 }
 
-function array<T>(schema: Schema<T>, path?: string) {
+export function array<T>(schema: Schema<T>, path?: string) {
 	return new ArraySchema<T>(schema, path)
 }
 
-function object<T extends Record<string, Schema<any>>>(
+export function object<T extends Record<string, Schema<any>>>(
 	properties: T,
 	path?: string,
 ): Schema<{ [K in keyof T]: T[K] extends Schema<infer U> ? U : never }> {
 	return new ObjectSchema<T>(properties, path)
 }
 
-function literal<T extends string | number | boolean>(value: T, path?: string) {
+export function literal<T extends string | number | boolean>(
+	value: T,
+	path?: string,
+) {
 	return new LiteralSchema<T>(value, path)
 }
 
-function union<T extends unknown[]>(
-	schemas: { [K in keyof T]: Schema<T[K]> },
-): UnionSchema<T> {
+export function union<T extends unknown[]>(
+	schemas: [...{ [K in keyof T]: Schema<T[K]> }],
+): Schema<T[number]> {
 	return new UnionSchema(schemas)
 }
 
@@ -354,17 +357,19 @@ const user = object({
 	name: string(),
 	age: number(),
 	type: union([literal("admin"), literal("user")]),
+	tags: array(string()).min(1).max(3),
 })
 
-try {
-	const result = user.parse({
-		name: "sai",
-		age: 1,
-		type: "admin",
-	})
-	console.log(result)
-} catch (e) {
-	if (e instanceof ValidationError) {
-		console.log(e.options)
-	}
-}
+// try {
+// 	const result = user.parse({
+// 		name: "sai",
+// 		age: 1,
+// 		type: "admin",
+// 		tags: ["hi", "hi", "hi"],
+// 	})
+// 	console.log(result)
+// } catch (e) {
+// 	if (e instanceof ValidationError) {
+// 		console.log(e.options)
+// 	}
+// }
