@@ -84,7 +84,19 @@ class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
 	}
 
 	compile(): void {
-		// TODO: implement
+		this.schemas.forEach((schema) => schema.compile())
+
+		this._compiledParse = new Function(
+			"value",
+			`
+			for (const schema of this.schemas) {
+				try {
+					return schema.parse(value);
+				} catch (e) {}
+			}
+			throw this.error("No schema matched", value);
+			`,
+		) as any
 	}
 
 	parse(value: unknown): T[number] {
@@ -111,7 +123,15 @@ class LiteralSchema<
 	}
 
 	compile(): void {
-		// TODO: implement
+		this._compiledParse = new Function(
+			"value",
+			`
+			if (value !== ${JSON.stringify(this.value)}) {
+				throw this.error("Value does not match literal", value);
+			}
+			return value;
+			`,
+		) as any
 	}
 
 	parse(value: unknown): T {
@@ -260,19 +280,33 @@ class BooleanSchema extends Schema<boolean> {
 	}
 
 	compile(): void {
-		// TODO: implement
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "boolean") throw this.error("is not a boolean", value);',
+		)
+
+		if (this.options.true) {
+			checks.push('if (value !== true) throw this.error("is not true", value);')
+		}
+		if (this.options.false) {
+			checks.push(
+				'if (value !== false) throw this.error("is not false", value);',
+			)
+		}
+
+		this._compiledParse = new Function(
+			"value",
+			`
+			${checks.join("\n")}
+			return value;
+			`,
+		) as any
 	}
 
 	parse(value: unknown): boolean {
-		// return this.runParser(value, (value) => {
-		// 	if (typeof value !== "boolean")
-		// 		throw this.error("is not a boolean", value)
-		// 	if (this._true && value !== true) throw this.error("is not true", value)
-		// 	if (this._false && value !== false)
-		// 		throw this.error("is not false", value)
-		// 	return value
-		// })
-		return this._compiledParse!(value)
+		return this.runParser(value, (value) => {
+			return this._compiledParse!.call(this, value)
+		})
 	}
 }
 
@@ -338,7 +372,6 @@ class ArraySchema<T> extends Schema<T[]> {
 class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
 }> {
-	private propertyKeys: string[]
 	constructor(
 		public properties: T,
 		path?: string,
@@ -350,7 +383,6 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 				schema.path = key
 			}
 		}
-		this.propertyKeys = Object.keys(properties)
 		this.compile()
 	}
 
@@ -426,6 +458,10 @@ const user = object({
 	age: number(),
 	type: union([literal("admin"), literal("user")]),
 	tags: array(string()).min(1).max(3),
+	properties: object({
+		age: number(),
+		name: string(),
+	}),
 })
 
 try {
@@ -434,6 +470,10 @@ try {
 		age: 1,
 		type: "admin",
 		tags: ["hi", "hi", "hi"],
+		properties: {
+			age: 1,
+			name: "sai",
+		},
 	})
 	console.log(result)
 } catch (e) {
