@@ -11,8 +11,8 @@ export class ValidationError extends Error {
 }
 
 abstract class Schema<T> {
-	_required: boolean = true
-	_nullable: boolean = true
+	protected _required: boolean = true
+	protected _nullable: boolean = true
 	private _refineFns: ((value: T) => boolean)[] = []
 	protected _compiledParse?: (value: unknown) => T
 
@@ -80,6 +80,11 @@ abstract class Schema<T> {
 class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
 	constructor(public schemas: [...Schema<T[number]>[]]) {
 		super("union", "union")
+		this.compile()
+	}
+
+	compile(): void {
+		// TODO: implement
 	}
 
 	parse(value: unknown): T[number] {
@@ -102,6 +107,11 @@ class LiteralSchema<
 		path?: string,
 	) {
 		super("literal", path)
+		this.compile()
+	}
+
+	compile(): void {
+		// TODO: implement
 	}
 
 	parse(value: unknown): T {
@@ -178,8 +188,6 @@ type NumberSchemaOptions = {
 }
 
 class NumberSchema extends Schema<number> {
-	private _compiledParse?: (value: unknown) => number
-
 	constructor(public options: NumberSchemaOptions) {
 		super("number", options.path)
 		this.compile()
@@ -231,36 +239,40 @@ class NumberSchema extends Schema<number> {
 	}
 }
 
-class BooleanSchema extends Schema<boolean> {
-	private _true?: boolean
-	private _false?: boolean
+type BooleanSchemaOptions = {
+	path?: string
+	true?: boolean
+	false?: boolean
+}
 
-	constructor(path?: string) {
-		super("boolean", path ?? "boolean")
+class BooleanSchema extends Schema<boolean> {
+	constructor(public options: BooleanSchemaOptions) {
+		super("boolean", options.path)
+		this.compile()
 	}
 
 	true() {
-		this._true = true
-		return this
+		return new BooleanSchema({ ...this.options, true: true })
 	}
 
 	false() {
-		this._false = true
-		return this
+		return new BooleanSchema({ ...this.options, false: true })
+	}
+
+	compile(): void {
+		// TODO: implement
 	}
 
 	parse(value: unknown): boolean {
-		return this.runParser(value, (value) => {
-			if (typeof value !== "boolean")
-				throw this.error("is not a boolean", value)
-
-			if (this._true && value !== true) throw this.error("is not true", value)
-
-			if (this._false && value !== false)
-				throw this.error("is not false", value)
-
-			return value
-		})
+		// return this.runParser(value, (value) => {
+		// 	if (typeof value !== "boolean")
+		// 		throw this.error("is not a boolean", value)
+		// 	if (this._true && value !== true) throw this.error("is not true", value)
+		// 	if (this._false && value !== false)
+		// 		throw this.error("is not false", value)
+		// 	return value
+		// })
+		return this._compiledParse!(value)
 	}
 }
 
@@ -324,26 +336,38 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 			}
 		}
 		this.propertyKeys = Object.keys(properties)
+		this.compile()
+	}
+
+	private compile() {
+		const validators = Object.entries(this.properties).map(
+			([key, schema]) => `result.${key} = ${schema.compile()}(value.${key});`,
+		)
+		this._compiledParse = new Function(
+			"value",
+			`{ ${validators.join("")} }`,
+		) as any
 	}
 
 	parse(value: unknown): {
 		[K in keyof T]: T[K] extends Schema<infer U> ? U : never
 	} {
-		return this.runParser(value, (value) => {
-			if (typeof value !== "object" || value === null) {
-				throw this.error("is not an object", value)
-			}
+		// return this.runParser(value, (value) => {
+		// 	if (typeof value !== "object" || value === null) {
+		// 		throw this.error("is not an object", value)
+		// 	}
 
-			const result = Object.create(null)
-			const len = this.propertyKeys.length
-			for (let i = 0; i < len; i++) {
-				const key = this.propertyKeys[i]
-				const schema = this.properties[key]
-				const propertyValue = (value as any)[key]
-				result[key] = schema.parse(propertyValue)
-			}
-			return result
-		})
+		// 	const result = Object.create(null)
+		// 	const len = this.propertyKeys.length
+		// 	for (let i = 0; i < len; i++) {
+		// 		const key = this.propertyKeys[i]
+		// 		const schema = this.properties[key]
+		// 		const propertyValue = (value as any)[key]
+		// 		result[key] = schema.parse(propertyValue)
+		// 	}
+		// 	return result
+		// })
+		return this._compiledParse!(value)
 	}
 }
 
