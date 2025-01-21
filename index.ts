@@ -313,7 +313,7 @@ type ObjectSchemaResult<T extends Record<string, Schema<any>>> = {
 }
 
 type ObjectSchemaParams = {
-  path?: string
+	path?: string
 }
 
 class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<
@@ -321,7 +321,7 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<
 > {
 	constructor(
 		public properties: T,
-    public params?: ObjectSchemaParams
+		public params?: ObjectSchemaParams,
 	) {
 		super("object", params?.path)
 		for (const key in properties) {
@@ -349,39 +349,41 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<
 	}
 }
 
-function number(params?: NumberSchemaParams) {
+export function number(params?: NumberSchemaParams) {
 	return new NumberSchema(params ?? {})
 }
 
-function string(params?: StringSchemaParams) {
+export function string(params?: StringSchemaParams) {
 	return new StringSchema(params ?? {})
 }
 
-function boolean(params?: BooleanSchemaParams) {
+export function boolean(params?: BooleanSchemaParams) {
 	return new BooleanSchema(params ?? {})
 }
 
-function array<T>(schema: Schema<T>, params?: ArraySchemaParams) {
+export function array<T>(schema: Schema<T>, params?: ArraySchemaParams) {
 	return new ArraySchema<T>(schema, params ?? {})
 }
 
-function object<T extends Record<string, Schema<any>>>(
+export function object<T extends Record<string, Schema<any>>>(
 	properties: T,
-  params?: ObjectSchemaParams
+	params?: ObjectSchemaParams,
 ): Schema<{ [K in keyof T]: T[K] extends Schema<infer U> ? U : never }> {
 	return new ObjectSchema<T>(properties, params)
 }
 
-function literal<T extends LiteralSchemaTypes>(literalValue: T, path?: string) {
+export function literal<T extends LiteralSchemaTypes>(
+	literalValue: T,
+	path?: string,
+) {
 	return new LiteralSchema(literalValue, { path })
 }
 
-function union<T extends unknown[]>(
+export function union<T extends unknown[]>(
 	schemas: { [K in keyof T]: Schema<T[K]> },
 ): UnionSchema<T> {
 	return new UnionSchema(schemas)
 }
-
 
 type Infer<S> = S extends Schema<infer T> ? T : never
 
