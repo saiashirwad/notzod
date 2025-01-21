@@ -292,7 +292,32 @@ class ArraySchema<T> extends Schema<T[]> {
 	}
 
 	compile(): void {
-		// TODO: implement
+		this.schema.compile()
+
+		const minCheck = this.options.min
+			? `if (len < ${this.options.min}) throw this.error("expected a minimum of ${this.options.min} items", value);`
+			: ""
+
+		const maxCheck = this.options.max
+			? `if (len > ${this.options.max}) throw this.error("expected a maximum of ${this.options.max} items", value);`
+			: ""
+
+		this._compiledParse = new Function(
+			"value",
+			`
+			if (!Array.isArray(value)) {
+				throw this.error("is not an array", value);
+			}
+			const len = value.length;
+			${minCheck}
+			${maxCheck}
+			const result = new Array(len);
+			for (let i = 0; i < len; i++) {
+				result[i] = this.schema.parse(value[i]);
+			}
+			return result;
+			`,
+		) as any
 	}
 
 	min(value: number) {
@@ -305,29 +330,7 @@ class ArraySchema<T> extends Schema<T[]> {
 
 	parse(value: unknown): T[] {
 		return this.runParser(value, (value) => {
-			if (!Array.isArray(value)) {
-				throw this.error("is not an array", value)
-			}
-
-			const len = value.length
-			if (this.options.min && len < this.options.min) {
-				throw this.error(
-					`expected a minimum of ${this.options.min} items`,
-					value,
-				)
-			}
-			if (this.options.max && len > this.options.max) {
-				throw this.error(
-					`expected a maximum of ${this.options.max} items`,
-					value,
-				)
-			}
-
-			const result = new Array(len)
-			for (let i = 0; i < len; i++) {
-				result[i] = this.schema.parse(value[i])
-			}
-			return result
+			return this._compiledParse!.call(this, value)
 		})
 	}
 }
@@ -354,35 +357,28 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	compile() {
 		const validators = Object.entries(this.properties).map(([key, schema]) => {
 			schema.compile()
-			return `result.${key} = ${schema.compile()}(value.${key});`
+			return `result.${key} = this.properties.${key}.parse(value.${key});`
 		})
+
 		this._compiledParse = new Function(
 			"value",
-			`{ ${validators.join("")} }`,
+			`
+			if (typeof value !== "object" || value === null) {
+				throw this.error("is not an object", value);
+			}
+			const result = Object.create(null);
+			${validators.join("\n")}
+			return result;
+			`,
 		) as any
-
-		console.log(this._compiledParse?.toString())
 	}
 
 	parse(value: unknown): {
 		[K in keyof T]: T[K] extends Schema<infer U> ? U : never
 	} {
-		// return this.runParser(value, (value) => {
-		// 	if (typeof value !== "object" || value === null) {
-		// 		throw this.error("is not an object", value)
-		// 	}
-
-		// 	const result = Object.create(null)
-		// 	const len = this.propertyKeys.length
-		// 	for (let i = 0; i < len; i++) {
-		// 		const key = this.propertyKeys[i]
-		// 		const schema = this.properties[key]
-		// 		const propertyValue = (value as any)[key]
-		// 		result[key] = schema.parse(propertyValue)
-		// 	}
-		// 	return result
-		// })
-		return this._compiledParse!(value)
+		return this.runParser(value, (value) => {
+			return this._compiledParse!.call(this, value)
+		})
 	}
 }
 
