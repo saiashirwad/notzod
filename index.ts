@@ -11,8 +11,8 @@ export class ValidationError extends Error {
 }
 
 abstract class Schema<T> {
-	private _required: boolean = true
-	private _nullable: boolean = true
+	_required: boolean = true
+	_nullable: boolean = true
 	private _refineFns: ((value: T) => boolean)[] = []
 
 	constructor(
@@ -109,6 +109,7 @@ class LiteralSchema<T extends string | number | boolean> extends Schema<T> {
 }
 
 class StringSchema extends Schema<string> {
+	private compiledParse?: (value: unknown) => string
 	private _pattern?: RegExp
 	private _min?: number
 	private _max?: number
@@ -132,21 +133,37 @@ class StringSchema extends Schema<string> {
 		return this
 	}
 
+	compile() {
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "string") throw this.error("not a string");',
+		)
+		if (this._min)
+			checks.push(
+				`if (value.length < ${this._min}) throw this.error("too short");`,
+			)
+		if (this._max)
+			checks.push(
+				`if (value.length > ${this._max}) throw this.error("too long");`,
+			)
+		if (this._pattern)
+			checks.push(
+				`if (!${this._pattern}.test(value)) throw error("pattern mismatch");`,
+			)
+
+		this.compiledParse = new Function(
+			"value",
+			"error",
+			`
+      ${checks.join("\n")}
+      return value;
+    `,
+		) as any
+	}
+
 	parse(value: unknown): string {
-		return this.runParser(value, (value) => {
-			if (typeof value !== "string") throw this.error("is not a string", value)
-
-			if (this._pattern && !this._pattern.test(value))
-				throw this.error("Value does not match pattern", value)
-
-			if (this._min && value.length < this._min)
-				throw this.error("Value is too short", value)
-
-			if (this._max && value.length > this._max)
-				throw this.error("Value is too long", value)
-
-			return value
-		})
+		if (!this.compiledParse) this.compile()
+		return this.compiledParse!(value)
 	}
 }
 
@@ -155,6 +172,7 @@ class NumberSchema extends Schema<number> {
 	private _gt?: number
 	private _isPositive?: boolean
 	private _isNegative?: boolean
+	private _compiledParse?: (value: unknown) => number
 
 	constructor(path?: string) {
 		super("number", path ?? "number")
@@ -180,24 +198,37 @@ class NumberSchema extends Schema<number> {
 		return this
 	}
 
+	compile() {
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "number") throw this.error("is not a number", value);',
+		)
+		if (this._isPositive)
+			checks.push(`if (value <= 0) throw this.error("is not positive", value);`)
+		if (this._isNegative)
+			checks.push(`if (value >= 0) throw this.error("is not negative", value);`)
+		if (this._lt)
+			checks.push(
+				`if (value > ${this._lt}) throw this.error("Value is too small", value);`,
+			)
+		if (this._gt)
+			checks.push(
+				`if (value < ${this._gt}) throw this.error("Value is too large", value);`,
+			)
+
+		this._compiledParse = new Function(
+			"value",
+			"error",
+			`
+      ${checks.join("\n")}
+      return value;
+    `,
+		) as any
+	}
+
 	parse(value: unknown): number {
-		return this.runParser(value, (value) => {
-			if (typeof value !== "number") throw this.error("is not a number", value)
-
-			if (this._isPositive && value <= 0)
-				throw this.error("is not positive", value)
-
-			if (this._isNegative && value >= 0)
-				throw this.error("is not negative", value)
-
-			if (this._lt && value > this._lt)
-				throw this.error("Value is too small", value)
-
-			if (this._gt && value < this._gt)
-				throw this.error("Value is too large", value)
-
-			return value
-		})
+		if (!this._compiledParse) this.compile()
+		return this._compiledParse!(value)
 	}
 }
 
@@ -360,6 +391,67 @@ const user = object({
 	tags: array(string()).min(1).max(3),
 })
 
+// function schemaToIR(schema: Schema<any>): any {
+// 	const baseIR = {
+// 		type: schema.type,
+// 		required: schema._required,
+// 		nullable: schema._nullable,
+// 		path: schema.path,
+// 	}
+
+// 	if (schema instanceof StringSchema) {
+// 		return {
+// 			...baseIR,
+// 			min: schema.min,
+// 			max: schema.max,
+// 			pattern: schema.pattern
+// 				? {
+// 						source: schema.pattern.source,
+// 						flags: schema.pattern.flags,
+// 					}
+// 				: undefined,
+// 		}
+// 	} else if (schema instanceof NumberSchema) {
+// 		return {
+// 			...baseIR,
+// 			lt: schema.lt,
+// 			gt: schema.gt,
+// 			isPositive: schema.isPositive,
+// 			isNegative: schema.isNegative,
+// 		}
+// 	} else if (schema instanceof BooleanSchema) {
+// 		return {
+// 			...baseIR,
+// 			mustBeTrue: schema.mustBeTrue,
+// 			mustBeFalse: schema.mustBeFalse,
+// 		}
+// 	} else if (schema instanceof ArraySchema) {
+// 		return {
+// 			...baseIR,
+// 			elementSchema: schemaToIR(schema.schema),
+// 			min: schema.min,
+// 			max: schema.max,
+// 		}
+// 	} else if (schema instanceof ObjectSchema) {
+// 		const properties: Record<string, any> = {}
+// 		for (const key of schema.propertyKeys) {
+// 			properties[key] = schemaToIR(schema.properties[key])
+// 		}
+// 		return { ...baseIR, properties }
+// 	} else if (schema instanceof UnionSchema) {
+// 		return {
+// 			...baseIR,
+// 			options: schema.schemas.map((s) => schemaToIR(s)),
+// 		}
+// 	} else if (schema instanceof LiteralSchema) {
+// 		return { ...baseIR, value: schema.value }
+// 	}
+// 	throw new Error(`Unsupported schema type: ${schema.type}`)
+// }
+
+// const result = schemaToIR(user)
+// console.log(result)
+
 // try {
 // 	const result = user.parse({
 // 		name: "sai",
@@ -373,3 +465,13 @@ const user = object({
 // 		console.log(e.options)
 // 	}
 // }
+
+const rip = number().gt(1).lt(3)
+try {
+	const result = rip.parse(2)
+	console.log(result)
+} catch (e) {
+	if (e instanceof ValidationError) {
+		console.log(e.options)
+	}
+}
