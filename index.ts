@@ -443,12 +443,12 @@ try {
 	}
 }
 
-// const rip = number().gt(1).lt(3)
-// try {
-// 	const result = rip.parse(2)
-// 	console.log(result)
-// } catch (e) {
-// 	if (e instanceof ValidationError) {
-// 		console.log(e.options)
-// 	}
-// }
+const rip = number().gt(1).lt(3)
+try {
+	const result = rip.parse(2)
+	console.log(result)
+} catch (e) {
+	if (e instanceof ValidationError) {
+		console.log(e.options)
+	}
+}
