@@ -14,6 +14,9 @@ abstract class Schema<T> {
 	_required: boolean = true
 	_nullable: boolean = true
 	private _refineFns: ((value: T) => boolean)[] = []
+	protected _compiledParse?: (value: unknown) => T
+
+	abstract compile(): void
 
 	constructor(
 		public type: string,
@@ -118,8 +121,6 @@ type StringSchemaOptions = {
 }
 
 class StringSchema extends Schema<string> {
-	private _compiledParse?: (value: unknown) => string
-
 	constructor(public options: StringSchemaOptions) {
 		super("string", options.path)
 		this.compile()
