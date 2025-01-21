@@ -103,9 +103,9 @@ type LiteralSchemaParams = {
 class LiteralSchema<T extends LiteralSchemaTypes> extends Schema<T> {
 	constructor(
 		public literalValue: T,
-		public options: LiteralSchemaParams,
+		public params: LiteralSchemaParams,
 	) {
-		super("literal", options.path)
+		super("literal", params.path)
 	}
 
 	parse(value: unknown): T {
@@ -382,12 +382,6 @@ function union<T extends unknown[]>(
 	return new UnionSchema(schemas)
 }
 
-type user = {
-	name: string
-	age: number
-	type: "admin" | "user"
-	tags: string[]
-}
 
 type Infer<S> = S extends Schema<infer T> ? T : never
 
