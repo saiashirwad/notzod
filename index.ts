@@ -153,10 +153,8 @@ class StringSchema extends Schema<string> {
 
 		this.compiledParse = new Function(
 			"value",
-			"error",
-			`
-      ${checks.join("\n")}
-      return value;
+			`${checks.join("\n")}
+        return value;
     `,
 		) as any
 	}
@@ -218,11 +216,8 @@ class NumberSchema extends Schema<number> {
 
 		this._compiledParse = new Function(
 			"value",
-			"error",
-			`
-      ${checks.join("\n")}
-      return value;
-    `,
+			`${checks.join("\n")}
+       return value;`,
 		) as any
 	}
 
