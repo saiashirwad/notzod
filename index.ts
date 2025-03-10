@@ -579,7 +579,7 @@ type Infer<S> = S extends Schema<infer T> ? T : never
 const userSchema = object({
 	name: string().nullable(),
 	age: number().refine((age) => age >= 18, "Must be at least 18 years old"),
-	type: union<"admin" | "user">([literal("admin"), literal("user")]),
+	type: union([literal("admin"), literal("user")]),
 	tags: array(string()).min(2),
 	email: string().matches(/^[\w.-]+@[\w.-]+\.\w+$/),
 })
