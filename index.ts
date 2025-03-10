@@ -1,597 +1,494 @@
-type ValidationSuccess<T> = { success: true; data: T }
-type ValidationError = {
-	success: false
-	error: {
-		path: string[]
-		message: string
-		data?: unknown
-	}
-}
-type ValidationResult<T> = ValidationSuccess<T> | ValidationError
-
-abstract class Schema<T> {
+export class ValidationError extends Error {
 	constructor(
-		public readonly type: string,
-		public readonly path: string[] = [],
-	) {}
-
-	abstract _parse(value: unknown, path: string[]): ValidationResult<T>
-
-	parse(value: unknown): T {
-		const result = this._parse(value, this.path)
-		if (!result.success) {
-			throw new ValidationErrorImpl(result.error)
-		}
-		return result.data
-	}
-
-	safeParse(value: unknown): ValidationResult<T> {
-		return this._parse(value, this.path)
-	}
-
-	optional(): Schema<T | undefined> {
-		return new OptionalSchema<T>(this)
-	}
-
-	nullable(): Schema<T | null> {
-		return new NullableSchema<T>(this)
-	}
-
-	refine(
-		refineFn: (value: T) => boolean,
-		errorMessage: string = "Failed refinement check",
-	): Schema<T> {
-		return new RefinementSchema<T>(this, refineFn, errorMessage)
-	}
-
-	protected success<U>(data: U): ValidationSuccess<U> {
-		return { success: true, data }
-	}
-
-	protected error(
-		message: string,
-		path: string[],
-		data?: unknown,
-	): ValidationError {
-		return {
-			success: false,
-			error: {
-				path,
-				message,
-				data,
-			},
-		}
-	}
-
-	pipe<U>(schema: Schema<U>): Schema<U> {
-		return new PipeSchema<T, U>(this, schema)
-	}
-}
-
-class ValidationErrorImpl extends Error {
-	constructor(
-		public readonly error: {
-			path: string[]
+		public options: {
+			path?: string
 			message: string
 			data?: unknown
 		},
 	) {
-		const pathStr = error.path.length ? error.path.join(".") : "<root>"
-		super(`${pathStr}: ${error.message}`)
-		this.name = "ValidationError"
+		super(options.message)
 	}
 }
 
-class OptionalSchema<T> extends Schema<T | undefined> {
-	constructor(private readonly schema: Schema<T>) {
-		super("optional", schema.path)
-	}
+abstract class Schema<T> {
+	protected _required: boolean = true
+	protected _nullable: boolean = true
+	private _refineFns: ((value: T) => boolean)[] = []
+	protected _compiledParse?: (value: unknown) => T
 
-	_parse(value: unknown, path: string[]): ValidationResult<T | undefined> {
-		if (value === undefined) {
-			return this.success(undefined)
-		}
-		return this.schema._parse(value, path)
-	}
-}
+	abstract compile(): void
 
-class NullableSchema<T> extends Schema<T | null> {
-	constructor(private readonly schema: Schema<T>) {
-		super("nullable", schema.path)
-	}
-
-	_parse(value: unknown, path: string[]): ValidationResult<T | null> {
-		if (value === null) {
-			return this.success(null)
-		}
-		return this.schema._parse(value, path)
-	}
-}
-
-class RefinementSchema<T> extends Schema<T> {
 	constructor(
-		private readonly schema: Schema<T>,
-		private readonly refineFn: (value: T) => boolean,
-		private readonly errorMessage: string,
-	) {
-		super("refinement", schema.path)
+		public type: string,
+		public path?: string,
+	) {}
+
+	abstract parse(value: unknown): T | undefined
+
+	error(message: string, data?: unknown) {
+		return new ValidationError({
+			path: this.path,
+			message,
+			data,
+		})
 	}
 
-	_parse(value: unknown, path: string[]): ValidationResult<T> {
-		const result = this.schema._parse(value, path)
-		if (!result.success) {
-			return result
+	required() {
+		this._required = true
+		return this
+	}
+
+	optional(): Schema<T | undefined> {
+		this._required = false
+		return this as any
+	}
+
+	refine(refineFn: (value: T) => boolean): Schema<T> {
+		this._refineFns.push(refineFn)
+		return this
+	}
+
+	nullable(): Schema<T | null> {
+		this._nullable = true
+		return this as any
+	}
+
+	runParser(value: unknown, run: (value: unknown) => T): T {
+		if (value === null) {
+			if (this._nullable) {
+				return null as any
+			}
+			throw this.error("value cannot be null", value)
 		}
-		if (!this.refineFn(result.data)) {
-			return this.error(this.errorMessage, path, result.data)
+		if (value === undefined) {
+			if (!this._required) {
+				return undefined as any
+			}
+			throw this.error("value cannot be undefined", value)
+		}
+
+		const result = run(value)
+		for (const filterFn of this._refineFns) {
+			if (!filterFn(result)) {
+				throw this.error("value does not pass filter", result)
+			}
 		}
 		return result
 	}
 }
 
-class PipeSchema<T, U> extends Schema<U> {
-	constructor(
-		private readonly inputSchema: Schema<T>,
-		private readonly outputSchema: Schema<U>,
-	) {
-		super("pipe", inputSchema.path)
+class UnionSchema<T extends unknown[]> extends Schema<T[number]> {
+	constructor(public schemas: [...Schema<T[number]>[]]) {
+		super("union", "union")
+		this.compile()
 	}
 
-	_parse(value: unknown, path: string[]): ValidationResult<U> {
-		const result = this.inputSchema._parse(value, path)
-		if (!result.success) {
-			return result as ValidationError
-		}
-		return this.outputSchema._parse(result.data, path)
+	compile(): void {
+		this.schemas.forEach((schema) => schema.compile())
+
+		this._compiledParse = new Function(
+			"value",
+			`
+			for (const schema of this.schemas) {
+				try {
+					return schema.parse(value);
+				} catch (e) {}
+			}
+			throw this.error("No schema matched", value);
+			`,
+		) as any
 	}
+
+	parse(value: unknown): T[number] {
+		return this.runParser(value, (value) => {
+			for (const schema of this.schemas) {
+				try {
+					return schema.parse(value) as T[number]
+				} catch (e) {}
+			}
+			throw this.error("No schema matched", value)
+		})
+	}
+}
+
+class LiteralSchema<
+	T extends string | number | boolean | null,
+> extends Schema<T> {
+	constructor(
+		public value: T,
+		path?: string,
+	) {
+		super("literal", path)
+		this.compile()
+	}
+
+	compile(): void {
+		this._compiledParse = new Function(
+			"value",
+			`
+			if (value !== ${JSON.stringify(this.value)}) {
+				throw this.error("Value does not match literal", value);
+			}
+			return value;
+			`,
+		) as any
+	}
+
+	parse(value: unknown): T {
+		return this.runParser(value, (value) => {
+			if (value !== this.value)
+				throw this.error("Value does not match literal", value)
+			return value as T
+		})
+	}
+}
+
+type StringSchemaOptions = {
+	path?: string
+	min?: number
+	max?: number
+	pattern?: RegExp
 }
 
 class StringSchema extends Schema<string> {
-	private readonly minLength?: number
-	private readonly maxLength?: number
-	private readonly pattern?: RegExp
-
-	constructor(
-		options: {
-			minLength?: number
-			maxLength?: number
-			pattern?: RegExp
-			path?: string[]
-		} = {},
-	) {
+	constructor(public options: StringSchemaOptions) {
 		super("string", options.path)
-		this.minLength = options.minLength
-		this.maxLength = options.maxLength
-		this.pattern = options.pattern
+		this.compile()
 	}
 
-	_parse(value: unknown, path: string[]): ValidationResult<string> {
-		if (typeof value !== "string") {
-			return this.error("Expected string, got " + typeof value, path, value)
-		}
+	min(value: number) {
+		return new StringSchema({ ...this.options, min: value })
+	}
 
-		if (this.minLength !== undefined && value.length < this.minLength) {
-			return this.error(
-				`String must be at least ${this.minLength} characters`,
-				path,
-				value,
+	max(value: number) {
+		return new StringSchema({ ...this.options, max: value })
+	}
+
+	pattern(value: RegExp) {
+		return new StringSchema({ ...this.options, pattern: value })
+	}
+
+	compile() {
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "string") throw this.error("not a string");',
+		)
+		if (this.options.min)
+			checks.push(
+				`if (value.length < ${this.options.min}) throw this.error("too short");`,
 			)
-		}
-
-		if (this.maxLength !== undefined && value.length > this.maxLength) {
-			return this.error(
-				`String must be at most ${this.maxLength} characters`,
-				path,
-				value,
+		if (this.options.max)
+			checks.push(
+				`if (value.length > ${this.options.max}) throw this.error("too long");`,
 			)
-		}
+		if (this.options.pattern)
+			checks.push(
+				`if (!${this.options.pattern}.test(value)) throw error("pattern mismatch");`,
+			)
 
-		if (this.pattern !== undefined && !this.pattern.test(value)) {
-			return this.error("String does not match pattern", path, value)
-		}
-
-		return this.success(value)
+		this._compiledParse = new Function(
+			"value",
+			`${checks.join("\n")}
+        return value;
+    `,
+		) as any
 	}
 
-	min(length: number): StringSchema {
-		return new StringSchema({
-			minLength: length,
-			maxLength: this.maxLength,
-			pattern: this.pattern,
-			path: this.path,
-		})
+	parse(value: unknown): string {
+		return this._compiledParse!(value)
 	}
+}
 
-	max(length: number): StringSchema {
-		return new StringSchema({
-			minLength: this.minLength,
-			maxLength: length,
-			pattern: this.pattern,
-			path: this.path,
-		})
-	}
-
-	matches(pattern: RegExp): StringSchema {
-		return new StringSchema({
-			minLength: this.minLength,
-			maxLength: this.maxLength,
-			pattern,
-			path: this.path,
-		})
-	}
+type NumberSchemaOptions = {
+	path?: string
+	lt?: number
+	gt?: number
+	positive?: boolean
+	negative?: boolean
 }
 
 class NumberSchema extends Schema<number> {
-	private readonly _min?: number
-	private readonly _max?: number
-	private readonly isPositive?: boolean
-	private readonly isNegative?: boolean
-
-	constructor(
-		options: {
-			min?: number
-			max?: number
-			isPositive?: boolean
-			isNegative?: boolean
-			path?: string[]
-		} = {},
-	) {
+	constructor(public options: NumberSchemaOptions) {
 		super("number", options.path)
-		this._min = options.min
-		this._max = options.max
-		this.isPositive = options.isPositive
-		this.isNegative = options.isNegative
+		this.compile()
 	}
 
-	_parse(value: unknown, path: string[]): ValidationResult<number> {
-		if (typeof value !== "number" || Number.isNaN(value)) {
-			return this.error("Expected number, got " + typeof value, path, value)
-		}
-
-		if (this._min !== undefined && value < this._min) {
-			return this.error(`Number must be at least ${this._min}`, path, value)
-		}
-
-		if (this._max !== undefined && value > this._max) {
-			return this.error(`Number must be at most ${this._max}`, path, value)
-		}
-
-		if (this.isPositive && value <= 0) {
-			return this.error("Number must be positive", path, value)
-		}
-
-		if (this.isNegative && value >= 0) {
-			return this.error("Number must be negative", path, value)
-		}
-
-		return this.success(value)
+	lt(value: number) {
+		return new NumberSchema({ ...this.options, lt: value })
 	}
 
-	min(val: number): NumberSchema {
-		return new NumberSchema({
-			min: val,
-			max: this._max,
-			isPositive: this.isPositive,
-			isNegative: this.isNegative,
-			path: this.path,
-		})
+	gt(value: number) {
+		return new NumberSchema({ ...this.options, gt: value })
 	}
 
-	max(val: number): NumberSchema {
-		return new NumberSchema({
-			min: this._min,
-			max: val,
-			isPositive: this.isPositive,
-			isNegative: this.isNegative,
-			path: this.path,
-		})
+	positive() {
+		return new NumberSchema({ ...this.options, positive: true })
 	}
 
-	positive(): NumberSchema {
-		return new NumberSchema({
-			min: this._min,
-			max: this._max,
-			isPositive: true,
-			isNegative: false,
-			path: this.path,
-		})
+	negative() {
+		return new NumberSchema({ ...this.options, negative: true })
 	}
 
-	negative(): NumberSchema {
-		return new NumberSchema({
-			min: this._min,
-			max: this._max,
-			isPositive: false,
-			isNegative: true,
-			path: this.path,
+	compile() {
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "number") throw this.error("is not a number", value);',
+		)
+		if (this.options.positive)
+			checks.push(`if (value <= 0) throw this.error("is not positive", value);`)
+		if (this.options.negative)
+			checks.push(`if (value >= 0) throw this.error("is not negative", value);`)
+		if (this.options.lt)
+			checks.push(
+				`if (value > ${this.options.lt}) throw this.error("Value is too small", value);`,
+			)
+		if (this.options.gt)
+			checks.push(
+				`if (value < ${this.options.gt}) throw this.error("Value is too large", value);`,
+			)
+
+		this._compiledParse = new Function(
+			"value",
+			`${checks.join("\n")}
+       return value;`,
+		) as any
+	}
+
+	parse(value: unknown): number {
+		return this._compiledParse!(value)
+	}
+}
+
+type BooleanSchemaOptions = {
+	path?: string
+	true?: boolean
+	false?: boolean
+}
+
+class BooleanSchema extends Schema<boolean> {
+	constructor(public options: BooleanSchemaOptions) {
+		super("boolean", options.path)
+		this.compile()
+	}
+
+	true() {
+		return new BooleanSchema({ ...this.options, true: true })
+	}
+
+	false() {
+		return new BooleanSchema({ ...this.options, false: true })
+	}
+
+	compile(): void {
+		const checks: string[] = []
+		checks.push(
+			'if (typeof value !== "boolean") throw this.error("is not a boolean", value);',
+		)
+
+		if (this.options.true) {
+			checks.push('if (value !== true) throw this.error("is not true", value);')
+		}
+		if (this.options.false) {
+			checks.push(
+				'if (value !== false) throw this.error("is not false", value);',
+			)
+		}
+
+		this._compiledParse = new Function(
+			"value",
+			`
+			${checks.join("\n")}
+			return value;
+			`,
+		) as any
+	}
+
+	parse(value: unknown): boolean {
+		return this.runParser(value, (value) => {
+			return this._compiledParse!.call(this, value)
 		})
 	}
 }
 
-class BooleanSchema extends Schema<boolean> {
-	private readonly strictTrue?: boolean
-	private readonly strictFalse?: boolean
-
-	constructor(
-		options: {
-			strictTrue?: boolean
-			strictFalse?: boolean
-			path?: string[]
-		} = {},
-	) {
-		super("boolean", options.path)
-		this.strictTrue = options.strictTrue
-		this.strictFalse = options.strictFalse
-	}
-
-	_parse(value: unknown, path: string[]): ValidationResult<boolean> {
-		if (typeof value !== "boolean") {
-			return this.error("Expected boolean, got " + typeof value, path, value)
-		}
-
-		if (this.strictTrue && value !== true) {
-			return this.error("Boolean must be true", path, value)
-		}
-
-		if (this.strictFalse && value !== false) {
-			return this.error("Boolean must be false", path, value)
-		}
-
-		return this.success(value)
-	}
-
-	true(): BooleanSchema {
-		return new BooleanSchema({
-			strictTrue: true,
-			strictFalse: undefined,
-			path: this.path,
-		})
-	}
-
-	false(): BooleanSchema {
-		return new BooleanSchema({
-			strictTrue: undefined,
-			strictFalse: true,
-			path: this.path,
-		})
-	}
+type ArraySchemaOptions<T> = {
+	path?: string
+	min?: number
+	max?: number
 }
 
 class ArraySchema<T> extends Schema<T[]> {
 	constructor(
-		private readonly elementSchema: Schema<T>,
-		private readonly options: {
-			minLength?: number
-			maxLength?: number
-			path?: string[]
-		} = {},
+		public schema: Schema<T>,
+		public options: ArraySchemaOptions<T>,
 	) {
 		super("array", options.path)
+		this.compile()
 	}
 
-	_parse(value: unknown, path: string[]): ValidationResult<T[]> {
-		if (!Array.isArray(value)) {
-			return this.error("Expected array, got " + typeof value, path, value)
-		}
+	compile(): void {
+		this.schema.compile()
 
-		if (
-			this.options.minLength !== undefined &&
-			value.length < this.options.minLength
-		) {
-			return this.error(
-				`Array must have at least ${this.options.minLength} elements`,
-				path,
-				value,
-			)
-		}
+		const minCheck = this.options.min
+			? `if (len < ${this.options.min}) throw this.error("expected a minimum of ${this.options.min} items", value);`
+			: ""
 
-		if (
-			this.options.maxLength !== undefined &&
-			value.length > this.options.maxLength
-		) {
-			return this.error(
-				`Array must have at most ${this.options.maxLength} elements`,
-				path,
-				value,
-			)
-		}
+		const maxCheck = this.options.max
+			? `if (len > ${this.options.max}) throw this.error("expected a maximum of ${this.options.max} items", value);`
+			: ""
 
-		const result: T[] = []
-		for (let i = 0; i < value.length; i++) {
-			const elementPath = [...path, i.toString()]
-			const elementResult = this.elementSchema._parse(value[i], elementPath)
-			if (!elementResult.success) {
-				return elementResult
+		this._compiledParse = new Function(
+			"value",
+			`
+			if (!Array.isArray(value)) {
+				throw this.error("is not an array", value);
 			}
-			result.push(elementResult.data)
-		}
-
-		return this.success(result)
+			const len = value.length;
+			${minCheck}
+			${maxCheck}
+			const result = new Array(len);
+			for (let i = 0; i < len; i++) {
+				result[i] = this.schema.parse(value[i]);
+			}
+			return result;
+			`,
+		) as any
 	}
 
-	min(length: number): ArraySchema<T> {
-		return new ArraySchema(this.elementSchema, {
-			...this.options,
-			minLength: length,
-			path: this.path,
-		})
+	min(value: number) {
+		return new ArraySchema(this.schema, { ...this.options, min: value })
 	}
 
-	max(length: number): ArraySchema<T> {
-		return new ArraySchema(this.elementSchema, {
-			...this.options,
-			maxLength: length,
-			path: this.path,
+	max(value: number) {
+		return new ArraySchema(this.schema, { ...this.options, max: value })
+	}
+
+	parse(value: unknown): T[] {
+		return this.runParser(value, (value) => {
+			return this._compiledParse!.call(this, value)
 		})
 	}
 }
 
-class ObjectSchema<T extends Record<string, unknown>> extends Schema<T> {
+class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
+	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
+}> {
 	constructor(
-		private readonly shape: { [K in keyof T]: Schema<T[K]> },
-		path: string[] = [],
+		public properties: T,
+		path?: string,
 	) {
 		super("object", path)
-	}
-
-	_parse(value: unknown, path: string[]): ValidationResult<T> {
-		if (typeof value !== "object" || value === null) {
-			return this.error(
-				"Expected object, got " + (value === null ? "null" : typeof value),
-				path,
-				value,
-			)
-		}
-
-		const result: Record<string, unknown> = {}
-		for (const key in this.shape) {
-			const fieldPath = [...path, key]
-			const fieldSchema = this.shape[key]
-			const fieldValue = (value as Record<string, unknown>)[key]
-
-			const fieldResult = fieldSchema._parse(fieldValue, fieldPath)
-			if (!fieldResult.success) {
-				return fieldResult
+		for (const key in properties) {
+			const schema = properties[key]
+			if (schema instanceof Schema) {
+				schema.path = key
 			}
-
-			result[key] = fieldResult.data
 		}
-
-		return this.success(result as T)
+		this.compile()
 	}
 
-	extend<U extends Record<string, unknown>>(
-		shape: { [K in keyof U]: Schema<U[K]> },
-	): ObjectSchema<T & U> {
-		return new ObjectSchema<T & U>(
-			{ ...this.shape, ...shape } as any,
-			this.path,
-		)
-	}
-}
+	compile() {
+		const validators = Object.entries(this.properties).map(([key, schema]) => {
+			schema.compile()
+			return `result.${key} = this.properties.${key}.parse(value.${key});`
+		})
 
-class LiteralSchema<T extends string | number | boolean> extends Schema<T> {
-	constructor(
-		private readonly value: T,
-		path: string[] = [],
-	) {
-		super("literal", path)
-	}
-
-	_parse(value: unknown, path: string[]): ValidationResult<T> {
-		if (value !== this.value) {
-			return this.error(
-				`Expected ${JSON.stringify(this.value)}, got ${JSON.stringify(value)}`,
-				path,
-				value,
-			)
-		}
-		return this.success(this.value)
-	}
-}
-
-class UnionSchema<T> extends Schema<T> {
-	constructor(
-		private readonly schemas: Schema<any>[],
-		path: string[] = [],
-	) {
-		super("union", path)
-	}
-
-	_parse(value: unknown, path: string[]): ValidationResult<T> {
-		const errors: ValidationError[] = []
-
-		for (const schema of this.schemas) {
-			const result = schema._parse(value, path)
-			if (result.success) {
-				return result as ValidationSuccess<T>
+		this._compiledParse = new Function(
+			"value",
+			`
+			if (typeof value !== "object" || value === null) {
+				throw this.error("is not an object", value);
 			}
-			errors.push(result)
-		}
+			const result = Object.create(null);
+			${validators.join("\n")}
+			return result;
+			`,
+		) as any
+	}
 
-		return this.error(
-			"Value does not match any schema in union: " +
-				errors.map((e) => e.error.message).join("; "),
-			path,
-			value,
-		)
+	parse(value: unknown): {
+		[K in keyof T]: T[K] extends Schema<infer U> ? U : never
+	} {
+		return this.runParser(value, (value) => {
+			return this._compiledParse!.call(this, value)
+		})
 	}
 }
 
-function string(options?: {
-	minLength?: number
-	maxLength?: number
-	pattern?: RegExp
-}): StringSchema {
-	return new StringSchema(options)
-}
-
-function number(options?: {
-	min?: number
-	max?: number
-	isPositive?: boolean
-	isNegative?: boolean
-}): NumberSchema {
+export function number(options: NumberSchemaOptions = {}) {
 	return new NumberSchema(options)
 }
 
-function boolean(options?: {
-	strictTrue?: boolean
-	strictFalse?: boolean
-}): BooleanSchema {
+export function string(options: StringSchemaOptions = {}) {
+	return new StringSchema(options)
+}
+
+export function boolean(options: BooleanSchemaOptions = {}) {
 	return new BooleanSchema(options)
 }
 
-function array<T>(
+export function array<T>(
 	schema: Schema<T>,
-	options?: {
-		minLength?: number
-		maxLength?: number
-	},
-): ArraySchema<T> {
-	return new ArraySchema(schema, options)
+	options: ArraySchemaOptions<T> = {},
+) {
+	return new ArraySchema<T>(schema, options)
 }
 
-function object<T extends Record<string, unknown>>(
-	shape: { [K in keyof T]: Schema<T[K]> },
-): ObjectSchema<T> {
-	return new ObjectSchema<T>(shape)
+export function object<T extends Record<string, Schema<any>>>(
+	properties: T,
+	path?: string,
+): Schema<{ [K in keyof T]: T[K] extends Schema<infer U> ? U : never }> {
+	return new ObjectSchema<T>(properties, path)
 }
 
-function literal<T extends string | number | boolean>(
+export function literal<T extends string | number | boolean | null>(
 	value: T,
-): LiteralSchema<T> {
-	return new LiteralSchema<T>(value)
+	path?: string,
+) {
+	return new LiteralSchema<T>(value, path)
 }
 
-function union<T>(schemas: Schema<any>[]): UnionSchema<T> {
-	return new UnionSchema<T>(schemas)
+export function union<T extends unknown[]>(
+	schemas: [...{ [K in keyof T]: Schema<T[K]> }],
+): Schema<T[number]> {
+	return new UnionSchema(schemas)
 }
 
-type Infer<S> = S extends Schema<infer T> ? T : never
-
-const userSchema = object({
-	name: string(),
-	age: number().refine((age) => age >= 18, "Must be at least 18 years old"),
-	type: union<"admin" | "user">([literal("admin"), literal("user")]),
-	tags: array(string()).min(2),
-	email: string().matches(/^[\w.-]+@[\w.-]+\.\w+$/),
+const user = object({
+	name: string().max(3),
+	age: number(),
+	type: union([literal("admin"), literal("user")]),
+	tags: array(string()).min(1).max(3),
+	properties: object({
+		age: number(),
+		name: string(),
+	}),
 })
 
 try {
-	const user = userSchema.parse({
-		name: "John Doe",
-		age: 21,
+	const result = user.parse({
+		name: "sai",
+		age: 1,
 		type: "admin",
-		tags: ["one", "hi"],
-		email: "john@example.com",
+		tags: ["hi", "hi", "hi"],
+		properties: {
+			age: 1,
+			name: "sai",
+		},
 	})
-	console.log(user)
+	console.log(result)
 } catch (e) {
-	if (e instanceof ValidationErrorImpl) {
-		console.log(e.message)
-		console.log(e.error)
-	} else {
-		console.error(e)
+	console.log(e)
+	if (e instanceof ValidationError) {
+		console.log(e.options)
+	}
+}
+
+const rip = number().gt(1).lt(3)
+try {
+	const result = rip.parse(2)
+	console.log(result)
+} catch (e) {
+	if (e instanceof ValidationError) {
+		console.log(e.options)
 	}
 }
