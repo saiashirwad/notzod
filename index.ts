@@ -426,6 +426,10 @@ class ArraySchema<T> extends Schema<T[]> {
 	}
 }
 
+type ObjectSchemaResult<T extends Record<string, Schema<any>>> = {
+	[K in keyof T]: T[K] extends Schema<infer U> ? U : never
+}
+
 class ObjectSchema<T extends Record<string, unknown>> extends Schema<T> {
 	constructor(
 		private readonly shape: { [K in keyof T]: Schema<T[K]> },
@@ -552,9 +556,11 @@ function array<T>(
 	return new ArraySchema(schema, options)
 }
 
+type ObjectResult<T> = T extends ObjectSchema<infer R> ? R : never
+
 function object<T extends Record<string, unknown>>(
 	shape: { [K in keyof T]: Schema<T[K]> },
-): ObjectSchema<T> {
+): Schema<ObjectResult<ObjectSchema<T>>> {
 	return new ObjectSchema<T>(shape)
 }
 
@@ -571,7 +577,7 @@ function union<T>(schemas: Schema<any>[]): UnionSchema<T> {
 type Infer<S> = S extends Schema<infer T> ? T : never
 
 const userSchema = object({
-	name: string(),
+	name: string().nullable(),
 	age: number().refine((age) => age >= 18, "Must be at least 18 years old"),
 	type: union<"admin" | "user">([literal("admin"), literal("user")]),
 	tags: array(string()).min(2),
