@@ -1,7 +1,12 @@
 {
   "name": "notzod",
-  "module": "index.ts",
+  "module": "index.js",
   "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "build": "bun build src/index.ts --outdir dist",
+    "lint": "biome check src tests"
+  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/bun": "latest"
