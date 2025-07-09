@@ -173,3 +173,12 @@ dist
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Temporary build directories
+cjs-dist/
+dist/
+
+# Test files
+test-jit.*
+manual-test.*
+tsconfig.test.json

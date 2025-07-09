@@ -673,7 +673,6 @@ class ObjectSchema<T extends Record<string, Schema<any>>> extends Schema<{
 	}
 }
 
-export function number(options: NumberSchemaOptions = {}) {
 /**
  * @description Factory function to create a new NumberSchema.
  * @param {NumberSchemaOptions} [options={}] - Options for the number schema.
