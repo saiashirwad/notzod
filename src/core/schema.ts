@@ -19,7 +19,10 @@ export class ValidationErrorImpl extends Error {
 }
 
 export abstract class Schema<T> {
-	public _compiledParse?: (value: unknown, path: string[]) => ValidationResult<T>
+	public _compiledParse?: (
+		value: unknown,
+		path: string[],
+	) => ValidationResult<T>
 
 	constructor(
 		public readonly type: string,
@@ -39,7 +42,10 @@ export abstract class Schema<T> {
 	/**
 	 * Get the compiled parser, compiling if not already done
 	 */
-	protected getCompiledParser(): (value: unknown, path: string[]) => ValidationResult<T> {
+	protected getCompiledParser(): (
+		value: unknown,
+		path: string[],
+	) => ValidationResult<T> {
 		if (!this._compiledParse) {
 			this.compile()
 		}
@@ -105,15 +111,19 @@ export class OptionalSchema<T> extends Schema<T | undefined> {
 	compile(): void {
 		// Ensure the wrapped schema is compiled
 		this.schema.compile()
-		
+
 		const checks: string[] = []
-		checks.push('if (value === undefined) {')
-		checks.push('  return { success: true, data: undefined };')
-		checks.push('}')
-		checks.push('return this.schema.getCompiledParser()(value, path);')
+		checks.push("if (value === undefined) {")
+		checks.push("  return { success: true, data: undefined };")
+		checks.push("}")
+		checks.push("return this.schema.getCompiledParser()(value, path);")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<T | undefined>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<T | undefined>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)
@@ -136,15 +146,19 @@ export class NullableSchema<T> extends Schema<T | null> {
 	compile(): void {
 		// Ensure the wrapped schema is compiled
 		this.schema.compile()
-		
+
 		const checks: string[] = []
-		checks.push('if (value === null) {')
-		checks.push('  return { success: true, data: null };')
-		checks.push('}')
-		checks.push('return this.schema.getCompiledParser()(value, path);')
+		checks.push("if (value === null) {")
+		checks.push("  return { success: true, data: null };")
+		checks.push("}")
+		checks.push("return this.schema.getCompiledParser()(value, path);")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<T | null>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<T | null>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)
@@ -171,19 +185,25 @@ export class RefinementSchema<T> extends Schema<T> {
 	compile(): void {
 		// Ensure the wrapped schema is compiled
 		this.schema.compile()
-		
+
 		const checks: string[] = []
-		checks.push('const result = this.schema.getCompiledParser()(value, path);')
-		checks.push('if (!result.success) {')
-		checks.push('  return result;')
-		checks.push('}')
-		checks.push('if (!this.refineFn(result.data)) {')
-		checks.push(`  return { success: false, error: { path, message: ${JSON.stringify(this.errorMessage)}, data: result.data } };`)
-		checks.push('}')
-		checks.push('return result;')
+		checks.push("const result = this.schema.getCompiledParser()(value, path);")
+		checks.push("if (!result.success) {")
+		checks.push("  return result;")
+		checks.push("}")
+		checks.push("if (!this.refineFn(result.data)) {")
+		checks.push(
+			`  return { success: false, error: { path, message: ${JSON.stringify(this.errorMessage)}, data: result.data } };`,
+		)
+		checks.push("}")
+		checks.push("return result;")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<T>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<T>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)
@@ -214,16 +234,24 @@ export class PipeSchema<T, U> extends Schema<U> {
 		// Ensure both schemas are compiled
 		this.inputSchema.compile()
 		this.outputSchema.compile()
-		
+
 		const checks: string[] = []
-		checks.push('const result = this.inputSchema.getCompiledParser()(value, path);')
-		checks.push('if (!result.success) {')
-		checks.push('  return result;')
-		checks.push('}')
-		checks.push('return this.outputSchema.getCompiledParser()(result.data, path);')
+		checks.push(
+			"const result = this.inputSchema.getCompiledParser()(value, path);",
+		)
+		checks.push("if (!result.success) {")
+		checks.push("  return result;")
+		checks.push("}")
+		checks.push(
+			"return this.outputSchema.getCompiledParser()(result.data, path);",
+		)
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<U>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<U>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)

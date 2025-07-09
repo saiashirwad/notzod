@@ -19,30 +19,40 @@ export class BooleanSchema extends Schema<boolean> {
 
 	compile(): void {
 		const checks: string[] = []
-		
+
 		// Type check
 		checks.push('if (typeof value !== "boolean") {')
-		checks.push('  return { success: false, error: { path, message: "Expected boolean, got " + typeof value, data: value } };')
-		checks.push('}')
+		checks.push(
+			'  return { success: false, error: { path, message: "Expected boolean, got " + typeof value, data: value } };',
+		)
+		checks.push("}")
 
 		// Strict true check
 		if (this.strictTrue) {
-			checks.push('if (value !== true) {')
-			checks.push('  return { success: false, error: { path, message: "Boolean must be true", data: value } };')
-			checks.push('}')
+			checks.push("if (value !== true) {")
+			checks.push(
+				'  return { success: false, error: { path, message: "Boolean must be true", data: value } };',
+			)
+			checks.push("}")
 		}
 
 		// Strict false check
 		if (this.strictFalse) {
-			checks.push('if (value !== false) {')
-			checks.push('  return { success: false, error: { path, message: "Boolean must be false", data: value } };')
-			checks.push('}')
+			checks.push("if (value !== false) {")
+			checks.push(
+				'  return { success: false, error: { path, message: "Boolean must be false", data: value } };',
+			)
+			checks.push("}")
 		}
 
-		checks.push('return { success: true, data: value };')
+		checks.push("return { success: true, data: value };")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<boolean>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<boolean>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)

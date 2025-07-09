@@ -1,5 +1,5 @@
 import { Schema } from "../core/schema.js"
-import type { ValidationResult, ValidationError } from "../types/index.js"
+import type { ValidationError, ValidationResult } from "../types/index.js"
 
 export class ObjectSchema<T extends Record<string, unknown>> extends Schema<T> {
 	constructor(
@@ -14,31 +14,39 @@ export class ObjectSchema<T extends Record<string, unknown>> extends Schema<T> {
 		for (const key in this.shape) {
 			this.shape[key].compile()
 		}
-		
+
 		const checks: string[] = []
-		
+
 		// Type check
 		checks.push('if (typeof value !== "object" || value === null) {')
-		checks.push('  return { success: false, error: { path, message: "Expected object, got " + (value === null ? "null" : typeof value), data: value } };')
-		checks.push('}')
+		checks.push(
+			'  return { success: false, error: { path, message: "Expected object, got " + (value === null ? "null" : typeof value), data: value } };',
+		)
+		checks.push("}")
 
 		// Field validation
-		checks.push('const result = {};')
+		checks.push("const result = {};")
 		for (const key in this.shape) {
 			checks.push(`{`)
 			checks.push(`  const fieldPath = [...path, "${key}"];`)
 			checks.push(`  const fieldValue = value["${key}"];`)
-			checks.push(`  const fieldResult = this.shape["${key}"].getCompiledParser()(fieldValue, fieldPath);`)
+			checks.push(
+				`  const fieldResult = this.shape["${key}"].getCompiledParser()(fieldValue, fieldPath);`,
+			)
 			checks.push(`  if (!fieldResult.success) {`)
 			checks.push(`    return fieldResult;`)
 			checks.push(`  }`)
 			checks.push(`  result["${key}"] = fieldResult.data;`)
 			checks.push(`}`)
 		}
-		checks.push('return { success: true, data: result };')
+		checks.push("return { success: true, data: result };")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<T>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<T>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)

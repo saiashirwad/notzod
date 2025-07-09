@@ -25,44 +25,58 @@ export class NumberSchema extends Schema<number> {
 
 	compile(): void {
 		const checks: string[] = []
-		
+
 		// Type check
 		checks.push('if (typeof value !== "number" || Number.isNaN(value)) {')
-		checks.push('  return { success: false, error: { path, message: "Expected number, got " + typeof value, data: value } };')
-		checks.push('}')
+		checks.push(
+			'  return { success: false, error: { path, message: "Expected number, got " + typeof value, data: value } };',
+		)
+		checks.push("}")
 
 		// Min check
 		if (this._min !== undefined) {
 			checks.push(`if (value < ${this._min}) {`)
-			checks.push(`  return { success: false, error: { path, message: "Number must be at least ${this._min}", data: value } };`)
-			checks.push('}')
+			checks.push(
+				`  return { success: false, error: { path, message: "Number must be at least ${this._min}", data: value } };`,
+			)
+			checks.push("}")
 		}
 
 		// Max check
 		if (this._max !== undefined) {
 			checks.push(`if (value > ${this._max}) {`)
-			checks.push(`  return { success: false, error: { path, message: "Number must be at most ${this._max}", data: value } };`)
-			checks.push('}')
+			checks.push(
+				`  return { success: false, error: { path, message: "Number must be at most ${this._max}", data: value } };`,
+			)
+			checks.push("}")
 		}
 
 		// Positive check
 		if (this.isPositive) {
-			checks.push('if (value <= 0) {')
-			checks.push('  return { success: false, error: { path, message: "Number must be positive", data: value } };')
-			checks.push('}')
+			checks.push("if (value <= 0) {")
+			checks.push(
+				'  return { success: false, error: { path, message: "Number must be positive", data: value } };',
+			)
+			checks.push("}")
 		}
 
 		// Negative check
 		if (this.isNegative) {
-			checks.push('if (value >= 0) {')
-			checks.push('  return { success: false, error: { path, message: "Number must be negative", data: value } };')
-			checks.push('}')
+			checks.push("if (value >= 0) {")
+			checks.push(
+				'  return { success: false, error: { path, message: "Number must be negative", data: value } };',
+			)
+			checks.push("}")
 		}
 
-		checks.push('return { success: true, data: value };')
+		checks.push("return { success: true, data: value };")
 
 		try {
-			this._compiledParse = new Function('value', 'path', checks.join('\n')) as (value: unknown, path: string[]) => ValidationResult<number>
+			this._compiledParse = new Function(
+				"value",
+				"path",
+				checks.join("\n"),
+			) as (value: unknown, path: string[]) => ValidationResult<number>
 		} catch (error) {
 			// Fallback to regular parsing if compilation fails
 			this._compiledParse = this._parse.bind(this)
